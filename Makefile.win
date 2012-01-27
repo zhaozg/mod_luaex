@@ -1,0 +1,29 @@
+# $Id: Makefile.win,v 1.11 2011/07/30 19:06:37 zhaozg Exp $
+
+T= mod_luaex
+
+include config.win
+
+APREQ_SRC=$(APREQ_ROOT)\library
+APREQ_OBJ=$(APREQ_SRC)\cookie.obj $(APREQ_SRC)\error.obj $(APREQ_SRC)\module.obj $(APREQ_SRC)\module_cgi.obj \
+$(APREQ_SRC)\module_custom.obj $(APREQ_SRC)\param.obj $(APREQ_SRC)\parser.obj $(APREQ_SRC)\parser_header.obj \
+$(APREQ_SRC)\parser_multipart.obj $(APREQ_SRC)\parser_urlencoded.obj $(APREQ_SRC)\util.obj $(APREQ_SRC)\version.obj
+
+OBJS=src\apreq.obj src\buckets.obj src\extends.obj src\handle.obj src\modules.obj src\mod_luaex.obj src\table.obj $(APREQ_OBJ)
+
+lib: src\$T.so
+
+.c.obj:
+	$(CC) /nologo /c /Fo$@ $(CFLAGS) $<
+
+src\$T.so: $(OBJS)
+	link /DLL /out:src\$T.so $(OBJS) "$(LUA_LIB)" $(APACHE2X_LIB) wsock32.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib 
+	IF EXIST src\$T.so.manifest mt -manifest src\$T.so.manifest -outputresource:src\$T.so;2
+
+install: src\$T.so
+	IF NOT EXIST "$(LUA_LIBDIR)" mkdir "$(LUA_LIBDIR)"
+	copy src\$T.so "$(LUA_LIBDIR)"
+
+clean:
+	del src\$T.so $(OBJS) src\$T.lib src\$T.exp
+	IF EXIST src\$T.so.manifest del src\$T.so.manifest
