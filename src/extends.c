@@ -436,7 +436,7 @@ int ml_socache_lookup(lua_State*L) {
             c->_server = s;
             c->_timeout = timeout*APR_USEC_PER_SEC;
             c->_maxdatalen = 1024;
-            apr_pool_userdata_set(c,socache_key,NULL,pool);
+            apr_pool_userdata_set(c,socache_key,apr_pool_cleanup_null,pool);
         }
         c->_pool = r->pool;
         lua_boxpointer(L,c);

@@ -550,6 +550,7 @@ static int req_add_output_filter(lua_State *L) {
     const char* filter = luaL_checkstring(L,2);
 
     ap_filter_t * f = ap_add_output_filter(filter,NULL,r,r->connection);
+    apr_pool_userdata_set(L,ML_OUTPUT_FILTER_KEY4LUA, apr_pool_cleanup_null, r->pool);
     lua_pushboolean(L,f!=NULL);
     return 1;
 }
@@ -796,13 +797,13 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
 	conn_rec *c = f->c;
 	apr_bucket_brigade *bbb = f->ctx;
 	apr_bucket *b, *eos_bucket=NULL ;
-    lua_State   *L = NULL;
+	lua_State   *L = NULL;
 	apr_status_t rv;
 
 
-    struct dir_config *d = ap_get_module_config(r->per_dir_config, &luaex_module);
+	struct dir_config *d = ap_get_module_config(r->per_dir_config, &luaex_module);
 
-	if(apr_table_get(d->filter,f->frec->name)==NULL || apr_pool_userdata_get(&L,LUA_APR_POOL_KEY, r->pool) || L==NULL)
+	if(apr_table_get(d->filter,f->frec->name)==NULL || apr_pool_userdata_get(&L,ML_OUTPUT_FILTER_KEY4LUA, r->pool) || L==NULL)
 	{
 		ap_remove_output_filter(f);
 		return ap_pass_brigade(f->next, bb);
@@ -818,7 +819,7 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
     /* Interate through the available data. Stop if there is an EOS */
 #if AP_SERVER_MAJORVERSION_NUMBER==2 && AP_SERVER_MINORVERSION_NUMBER==0
     APR_BRIGADE_FOREACH(b, bb) {
-#elif AP_SERVER_MAJORVERSION_NUMBER==2 
+#elif AP_SERVER_MAJORVERSION_NUMBER==2
 	for (b = APR_BRIGADE_FIRST(bb);
 		b != APR_BRIGADE_SENTINEL(bb);
 		b = APR_BUCKET_NEXT(b))

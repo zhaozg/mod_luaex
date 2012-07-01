@@ -125,8 +125,8 @@ typedef struct {
 
 void ml_define_constants (lua_State *L, const  ml_constants tab[]);
 
-#define APRPOOL 	    "apr_pool"
-
+//output filter
+#define ML_OUTPUT_FILTER_KEY4LUA	"luavm4outputfilter"
 
 //socache
 #define PROVIDER	"provider"
