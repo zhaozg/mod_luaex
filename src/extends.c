@@ -1,5 +1,4 @@
 #include "mod_luaex.h"
-
 #include <ap_slotmem.h>
 
 #include <mod_session.h>

@@ -387,9 +387,9 @@ static int ap2req_parse_cookie_header(lua_State*L) {
 
 	apr_status_t rc = apreq_parse_cookie_header(h->pool, jar, cookiestr);
 	if(rc==APR_SUCCESS) {
-        ap_lua_push_apr_table(L, jar);
+		ap_lua_push_apr_table(L, jar);
 	}
-    return ap2req_push_status(L, rc);
+	return ap2req_push_status(L, rc);
 }
 
 static int ap2req_value_to_cookie(lua_State*L) {
@@ -834,47 +834,34 @@ static luaL_reg apreq_libs[] = {
     {NULL,          NULL},
 };
 
+static int ml_functions(lua_State *L)
+{
+    request_rec *r = CHECK_REQUEST_OBJECT(1);
+    apr_hash_t *dispatch;
+    apr_hash_index_t *iter;
+    lua_getfield(L, LUA_REGISTRYINDEX, "Apache2.Request.dispatch");
+    dispatch = lua_touserdata(L, -1);
+    lua_pop(L, 1);
+    assert(dispatch);
+
+    lua_newtable(L);
+    for(iter = apr_hash_first(r->pool, dispatch); iter; iter = apr_hash_next(iter)){
+	    const char* key;
+	    apr_ssize_t klen;
+	    lua_CFunction func;
+
+	    apr_hash_this(iter, &key, &klen, (void**)&func);
+	    lua_pushlstring(L,key,klen);
+	    lua_pushcfunction(L,func);
+	    lua_rawset(L,-3);
+    }
+    return 1;
+}
+
 int lua_apreq_bucket (lua_State *L);
-static luaL_reg apreqh_libs[] = {
-    {"parse_cookie_header", ap2req_parse_cookie_header},
-    {"value_to_cookie",     ap2req_value_to_cookie},
-    {"cookie_make",         ap2req_cookie_make},
-
-    {"param_make",          ap2req_param_make},
-    {"param_decode",        ap2req_param_decode},
-    {"param_as_string",     ap2req_params_as_string},
-    {"parse_query_string",  ap2req_parse_query_string},
-    {"value_to_param",      ap2req_value_to_param},
-
-    {"upload",		ap2req_upload},
-    {"uploads",    ap2req_uploads},
-
-    //get table
-    {"jar",		ap2req_jar},
-    {"args",    ap2req_args},
-    {"body",    ap2req_body},
-
-    {"param",		ap2req_param},
-    {"params",    ap2req_params},	//merge args and bodys
-
-    {"cookies",    ap2req_cookies},
-
-    //get named value
-    {"jar_get",    ap2req_jar_get},
-    {"args_get",    ap2req_args_get},
-    {"body_get",    ap2req_body_get},
-
-    {"brigade_limit",   ap2req_brigade_limit},
-    {"bucket",          lua_apreq_bucket},
-
-    {"read_limit",    ap2req_read_limit},
-    {"temp_dir",      ap2req_temp_dir},
-
-
-    {NULL,          NULL}
-};
-
-int ml_luaopen_apreq(lua_State *L) {
+req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool);
+int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
+    apr_hash_t *dispatch;
     luaL_register(L, "apreq", apreq_libs);
 
     luaL_newmetatable(L, "mod_luaex.cookie");
@@ -882,14 +869,45 @@ int ml_luaopen_apreq(lua_State *L) {
     luaL_newmetatable(L, "mod_luaex.param");
     luaL_register(L, NULL,param_mlibs);
 
-    luaL_newmetatable(L, "mod_luaex.apreq");
-    lua_pushstring(L,"__tostring");
-    lua_pushcfunction(L, apreq_tostring);
-    lua_settable(L,-3);
-    lua_pushstring(L, "__index");
-    lua_newtable(L);
-    luaL_register(L, NULL, apreqh_libs);
-    lua_settable(L,-3);
+    
+    lua_getfield(L, LUA_REGISTRYINDEX, "Apache2.Request.dispatch");
+    dispatch = lua_touserdata(L, -1);
+    lua_pop(L, 1);
+    assert(dispatch);
+
+    /* add field */
+    apr_hash_set(dispatch, "parse_cookie_header", APR_HASH_KEY_STRING, ml_makefun(&ap2req_parse_cookie_header, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "value_to_cookie", APR_HASH_KEY_STRING, ml_makefun(&ap2req_value_to_cookie, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "cookie_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
+
+    apr_hash_set(dispatch, "cookie_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "param_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_make, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "param_decode", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_decode, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "param_as_string", APR_HASH_KEY_STRING, ml_makefun(&ap2req_params_as_string, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "parse_query_string", APR_HASH_KEY_STRING, ml_makefun(&ap2req_parse_query_string, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "value_to_param", APR_HASH_KEY_STRING, ml_makefun(&ap2req_value_to_param, APL_REQ_FUNTYPE_LUACFUN, p));
+
+    apr_hash_set(dispatch, "upload", APR_HASH_KEY_STRING, ml_makefun(&ap2req_upload, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "uploads", APR_HASH_KEY_STRING, ml_makefun(&ap2req_uploads, APL_REQ_FUNTYPE_LUACFUN, p));
+
+    apr_hash_set(dispatch, "jar", APR_HASH_KEY_STRING, ml_makefun(&ap2req_jar, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "args", APR_HASH_KEY_STRING, ml_makefun(&ap2req_args, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "body", APR_HASH_KEY_STRING, ml_makefun(&ap2req_body, APL_REQ_FUNTYPE_LUACFUN, p));
+
+    apr_hash_set(dispatch, "param", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "params", APR_HASH_KEY_STRING, ml_makefun(&ap2req_params, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "cookies", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookies, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "jar_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_jar_get, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "args_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_args_get, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "body_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_body_get, APL_REQ_FUNTYPE_LUACFUN, p));
+
+    apr_hash_set(dispatch, "brigade_limit", APR_HASH_KEY_STRING, ml_makefun(&ap2req_brigade_limit, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "bucket", APR_HASH_KEY_STRING, ml_makefun(&lua_apreq_bucket, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "read_limit", APR_HASH_KEY_STRING, ml_makefun(&ap2req_read_limit, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "temp_dir", APR_HASH_KEY_STRING, ml_makefun(&ap2req_temp_dir, APL_REQ_FUNTYPE_LUACFUN, p));
+
+    apr_hash_set(dispatch, "pointer", APR_HASH_KEY_STRING, ml_makefun(&apreq_tostring, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "functions", APR_HASH_KEY_STRING, ml_makefun(&ml_functions, APL_REQ_FUNTYPE_LUACFUN, p));
 
     return 0;
 }

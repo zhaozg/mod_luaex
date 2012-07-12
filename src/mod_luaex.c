@@ -556,7 +556,7 @@ static int req_add_output_filter(lua_State *L) {
 }
 
 /**************************************************/
-static req_fun_t *makefun(const void *fun, int type, apr_pool_t *pool)
+req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool)
 {
 	req_fun_t *rft = apr_palloc(pool, sizeof(req_fun_t));
 	rft->fun = fun;
@@ -871,10 +871,22 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
 //////////////////////////////////////////////////////////////////////////
 
 APREQ_DECLARE(apreq_handle_t *) apreq_handle_apache2(request_rec *r);
-int req_apreq(lua_State*L){
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    apreq_handle_t* h  = apreq_handle_apache2(r);
-    return ml_push_object(L, h, "mod_luaex.apreq");
+apreq_handle_t* ml_r2apreq(lua_State*L,int n){
+    apr_status_t s;
+    request_rec *r = CHECK_REQUEST_OBJECT(n);
+    apreq_handle_t* h=NULL;
+    s = apr_pool_userdata_get(&h,"apreq_handle_t*",r->pool);
+    if(s==OK){
+	    if(h==NULL)
+	    {
+		    h  = apreq_handle_apache2(r);
+		    apr_pool_userdata_set(h,
+			    "apreq_handle_t*",
+			    apr_pool_cleanup_null,
+			    r->pool);
+	    }
+    }
+    return h;
 };
 
 apr_pool_t *lua_apr_pool_register(lua_State *L, apr_pool_t *new_pool);
@@ -900,7 +912,8 @@ static int req_args(lua_State *L)
 static int req_parsebody(lua_State *L)
 {
     request_rec *r = CHECK_REQUEST_OBJECT(1);
-    apreq_handle_t* req = apreq_handle_apache2(r);
+    apreq_handle_t* req = CHECK_APREQ_OBJECT(1);
+
     apr_status_t s = ap_discard_request_body(r);
 
     if(s==APR_SUCCESS)
@@ -930,52 +943,52 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	assert(dispatch);
 
 	/* add field */
-	apr_hash_set(dispatch, "header_only", APR_HASH_KEY_STRING, makefun(&req_header_only, APL_REQ_FUNTYPE_BOOLEAN, p));
+	apr_hash_set(dispatch, "header_only", APR_HASH_KEY_STRING, ml_makefun(&req_header_only, APL_REQ_FUNTYPE_BOOLEAN, p));
 
-	apr_hash_set(dispatch, "args", APR_HASH_KEY_STRING, makefun(&req_args, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "parsebody", APR_HASH_KEY_STRING, makefun(&req_parsebody, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "args", APR_HASH_KEY_STRING, ml_makefun(&req_args, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "parsebody", APR_HASH_KEY_STRING, ml_makefun(&req_parsebody, APL_REQ_FUNTYPE_LUACFUN, p));
 
 	/* add function */
-	apr_hash_set(dispatch, "print", APR_HASH_KEY_STRING, makefun(&req_print, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "add_cgi_vars", APR_HASH_KEY_STRING, makefun(&req_add_cgi_vars, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "print", APR_HASH_KEY_STRING, ml_makefun(&req_print, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "add_cgi_vars", APR_HASH_KEY_STRING, ml_makefun(&req_add_cgi_vars, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "get_remote_host", APR_HASH_KEY_STRING, makefun(&req_get_remote_host, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "get_remote_logname", APR_HASH_KEY_STRING, makefun(&req_get_remote_logname, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "get_remote_host", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_host, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "get_remote_logname", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_logname, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "server", APR_HASH_KEY_STRING, makefun(&req_server, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "connection", APR_HASH_KEY_STRING, makefun(&req_connection, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "apreq", APR_HASH_KEY_STRING, makefun(&req_apreq, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "server", APR_HASH_KEY_STRING, ml_makefun(&req_server, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "connection", APR_HASH_KEY_STRING, ml_makefun(&req_connection, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "apreq", APR_HASH_KEY_STRING, ml_makefun(&ml_r2apreq, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "read", APR_HASH_KEY_STRING, makefun(&req_read, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "rflush", APR_HASH_KEY_STRING, makefun(&req_rflush, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "remaining", APR_HASH_KEY_STRING, makefun(&req_remaining, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "get_client_block", APR_HASH_KEY_STRING, makefun(&req_get_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "setup_client_block", APR_HASH_KEY_STRING, makefun(&req_setup_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "should_client_block", APR_HASH_KEY_STRING, makefun(&req_should_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "discard_request_body", APR_HASH_KEY_STRING, makefun(&req_discard_request_body, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "read", APR_HASH_KEY_STRING, ml_makefun(&req_read, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "rflush", APR_HASH_KEY_STRING, ml_makefun(&req_rflush, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "remaining", APR_HASH_KEY_STRING, ml_makefun(&req_remaining, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "get_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_get_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "setup_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_setup_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "should_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_should_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "discard_request_body", APR_HASH_KEY_STRING, ml_makefun(&req_discard_request_body, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "add_output_filter", APR_HASH_KEY_STRING, makefun(&req_add_output_filter, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "add_output_filter", APR_HASH_KEY_STRING, ml_makefun(&req_add_output_filter, APL_REQ_FUNTYPE_LUACFUN, p));
 
 	/* extends apache modules API */
-	apr_hash_set(dispatch, "list_provider", APR_HASH_KEY_STRING, makefun(&ml_list_provider, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "socache_lookup", APR_HASH_KEY_STRING, makefun(&ml_socache_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "session_get", APR_HASH_KEY_STRING, makefun(&ml_session_get, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "session_set", APR_HASH_KEY_STRING, makefun(&ml_session_set, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "session_load", APR_HASH_KEY_STRING, makefun(&ml_session_load, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "session_save", APR_HASH_KEY_STRING, makefun(&ml_session_save, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "slotmem_create", APR_HASH_KEY_STRING, makefun(&ml_slotmem_create, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "slotmem_attach", APR_HASH_KEY_STRING, makefun(&ml_slotmem_attach, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "slotmem_lookup", APR_HASH_KEY_STRING, makefun(&ml_slotmem_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "list_provider", APR_HASH_KEY_STRING, ml_makefun(&ml_list_provider, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "socache_lookup", APR_HASH_KEY_STRING, ml_makefun(&ml_socache_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "session_get", APR_HASH_KEY_STRING, ml_makefun(&ml_session_get, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "session_set", APR_HASH_KEY_STRING, ml_makefun(&ml_session_set, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "session_load", APR_HASH_KEY_STRING, ml_makefun(&ml_session_load, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "session_save", APR_HASH_KEY_STRING, ml_makefun(&ml_session_save, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "slotmem_create", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_create, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "slotmem_attach", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_attach, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "slotmem_lookup", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "ssl_var_lookup", APR_HASH_KEY_STRING, makefun(&ml_ssl_var_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "ssl_is_https", APR_HASH_KEY_STRING, makefun(&ml_ssl_is_https, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "dbd_acquire", APR_HASH_KEY_STRING, makefun(&ml_dbd_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "dbd_prepare", APR_HASH_KEY_STRING, makefun(&ml_dbdriver_prepare, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "ssl_var_lookup", APR_HASH_KEY_STRING, ml_makefun(&ml_ssl_var_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "ssl_is_https", APR_HASH_KEY_STRING, ml_makefun(&ml_ssl_is_https, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "dbd_acquire", APR_HASH_KEY_STRING, ml_makefun(&ml_dbd_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "dbd_prepare", APR_HASH_KEY_STRING, ml_makefun(&ml_dbdriver_prepare, APL_REQ_FUNTYPE_LUACFUN, p));
 
 #ifdef ML_HAVE_RESLIST
-	apr_hash_set(dispatch, "reslist_acquire", APR_HASH_KEY_STRING, makefun(&ml_reslist_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "reslist_release", APR_HASH_KEY_STRING, makefun(&ml_reslist_release, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "reslist_invalidate", APR_HASH_KEY_STRING, makefun(&ml_reslist_invalidate, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "reslist_acquire", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "reslist_release", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_release, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "reslist_invalidate", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_invalidate, APL_REQ_FUNTYPE_LUACFUN, p));
 #endif
 
 }
@@ -1008,25 +1021,25 @@ static apr_status_t ml_lua_open(lua_State *L, apr_pool_t *p)
 	lua_pushcfunction(L, ml_table_remove);
 	lua_setfield(L, -2, "remove");
 
-    ml_define_constants (L, status_tabs);
+	ml_define_constants (L, status_tabs);
 	lua_pop(L,1);
 
 #ifdef LUA_APR_DECLARE_STATIC
-    luaopen_apr_core(L);
-    lua_setglobal(L,"apr.core");
+	luaopen_apr_core(L);
+	lua_setglobal(L,"apr.core");
 #endif
-    ml_luaopen_buckets(L);
-    ml_luaopen_apreq(L);
-    ml_luaopen_extends(L) ;
+	ml_luaopen_buckets(L);
+	ml_luaopen_apreq(L,p);
+	ml_luaopen_extends(L) ;
 	ml_ext_apr_table(L);
 	ml_ext_request_lmodule(L, p);
-    return OK;
+	return OK;
 };
 
 apr_status_t ml_register_hooks (apr_pool_t *p){
 	ap_find_module = APR_RETRIEVE_OPTIONAL_FN(ap_find_loaded_module_symbol);
-    ml_retrieve_option_functions (p);
-    APR_OPTIONAL_HOOK(ap_lua, lua_request,  ml_lua_request, NULL,NULL,APR_HOOK_MIDDLE);
-    APR_OPTIONAL_HOOK(ap_lua, lua_open,     ml_lua_open,    NULL,NULL,APR_HOOK_MIDDLE);
-    return 0;
+	ml_retrieve_option_functions (p);
+	APR_OPTIONAL_HOOK(ap_lua, lua_request,  ml_lua_request, NULL,NULL,APR_HOOK_MIDDLE);
+	APR_OPTIONAL_HOOK(ap_lua, lua_open,     ml_lua_open,    NULL,NULL,APR_HOOK_MIDDLE);
+	return 0;
 }

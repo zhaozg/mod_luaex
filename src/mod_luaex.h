@@ -217,6 +217,8 @@ typedef struct {
     server_rec *s;
 }ml_dbd;
 
+apreq_handle_t* ml_r2apreq(lua_State*L,int n);
+
 #define CHECK_REQUEST_OBJECT(x)  ml_check_object(L, x,"Apache2.Request")
 #define CHECK_CONNECTION_OBJECT(x)  ml_check_object(L, x,"Apache2.Connection")
 #define CHECK_SERVER_OBJECT(x)  ml_check_object(L, x,"Apache2.Server")
@@ -233,11 +235,10 @@ typedef struct {
 #define PUSH_BUCKETBRIGADE_OBJECT(x) ml_push_object(L, x, "mod_luaex.bucketbrigade")
 #define PUSH_BUCKET_OBJECT(x) ml_push_object(L, x, "mod_luaex.bucket")
 
-#define CHECK_APREQ_OBJECT(x)  ((apreq_handle_t*) ml_check_object(L, x,"mod_luaex.apreq"))
+#define CHECK_APREQ_OBJECT(x)  ml_r2apreq(L, x)
 #define CHECK_COOKIE_OBJECT(x) ((apreq_cookie_t*) ml_check_object(L, x,"mod_luaex.cookie"))
 #define CHECK_PARAM_OBJECT(x)  ((apreq_param_t *) ml_check_object(L, x,"mod_luaex.param"))
 
-#define PUSH_APREQ_OBJECT(x)    ml_push_object(L, x, "mod_luaex.apreq")
 #define PUSH_COOKIE_OBJECT(x)   ml_push_object(L, x, "mod_luaex.cookie")
 #define PUSH_PARAM_OBJECT(x)    ml_push_object(L, x, "mod_luaex.param")
 
@@ -245,7 +246,7 @@ AP_LUA_DECLARE(apr_table_t*) ap_lua_check_apr_table(lua_State *L, int index);
 AP_LUA_DECLARE(void) ap_lua_push_apr_table(lua_State *L, apr_table_t *t);
 
 int ml_ext_apr_table(lua_State*L);
-int ml_luaopen_apreq(lua_State *L);
+int ml_luaopen_apreq(lua_State *L,apr_pool_t *p);
 int ml_luaopen_buckets(lua_State *L);
 int ml_luaopen_extends(lua_State*L);
 
