@@ -280,5 +280,7 @@ int ml_reslist_release(lua_State*L);
 int ml_reslist_invalidate(lua_State*L);
 #endif
 
+void pstack_dump(lua_State *L,const char *msg);
+
 #endif
 

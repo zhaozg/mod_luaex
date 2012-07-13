@@ -16,6 +16,66 @@
 
 static APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module = NULL;
 
+void pstack_dump(lua_State *L,const char *msg)
+{
+	int i;
+	int top = lua_gettop(L);
+
+	printf("Lua Stack Dump: [%s]\n", msg);
+
+	for (i = 1; i <= top; i++) {
+		int t = lua_type(L, i);
+		switch (t) {
+	case LUA_TSTRING:{
+		printf("%d:  '%s'\n", i, lua_tostring(L, i));
+		break;
+			 }
+	case LUA_TUSERDATA:{
+		printf("%d:  userdata\n", i);
+		break;
+			   }
+	case LUA_TLIGHTUSERDATA:{
+		printf("%d:  lightuserdata\n",
+			i);
+		break;
+				}
+	case LUA_TNIL:{
+		printf("%d:  NIL\n", i);
+		break;
+		      }
+	case LUA_TNONE:{
+		printf("%d:  None\n", i);
+		break;
+		       }
+	case LUA_TBOOLEAN:{
+		printf("%d:  %s\n", i, lua_toboolean(L,
+			i) ? "true" :
+			"false");
+		break;
+			  }
+	case LUA_TNUMBER:{
+		printf("%d:  %g\n", i, lua_tonumber(L, i));
+		break;
+			 }
+	case LUA_TTABLE:{
+		printf("%d:  <table>\n", i);
+		break;
+			}
+	case LUA_TTHREAD:{
+		printf("%d:  <thread>\n", i);
+		break;
+			 }
+	case LUA_TFUNCTION:{
+		printf("%d:  <function>\n", i);
+		break;
+			   }
+	default:{
+		printf("%d:  unknown: [%s]\n", i, lua_typename(L, i));
+		break;
+		}
+		}
+	}
+}
 /************************************************************************/
 /*                                                                      */
 /************************************************************************/

@@ -297,7 +297,11 @@ static int cookie_index(lua_State*L) {
 			lua_pushinteger(L,c->flags);
 		else if(strcmp(key,"value")==0)
 			ap2req_pushvalue(L,&c->v);
-		else 
+		else if(strcmp(key,"name")==0)
+			lua_pushlstring(L,c->v.name,c->v.nlen);
+		else if(strcmp(key,"data")==0)
+			lua_pushlstring(L,c->v.data,c->v.dlen);
+		else
 			lua_pushnil(L);
 		return 1;
 	}else
@@ -377,17 +381,6 @@ output
     table(nil) apr_status
 */
 
-static int ap2req_parse_cookie_header(lua_State*L) {
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* cookiestr = luaL_checkstring(L,2);
-	apr_table_t *jar = apr_table_make(h->pool, APREQ_DEFAULT_NELTS);
-
-	apr_status_t rc = apreq_parse_cookie_header(h->pool, jar, cookiestr);
-	if(rc==APR_SUCCESS) {
-		ap_lua_push_apr_table(L, jar);
-	}
-	return ap2req_push_status(L, rc);
-}
 
 
 static int ap2req_cookie_make(lua_State*L) {
@@ -396,9 +389,9 @@ static int ap2req_cookie_make(lua_State*L) {
 	const char* name = NULL;
 	const char* value = NULL;
 	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	if(lua_isnil(L,2) || lua_isboolean(L,2))
+	if(lua_isnoneornil(L,2) || lua_isboolean(L,2))
 	{
-		if(lua_isnil(L,2)){
+		if(lua_isnoneornil(L,2)){
 			apr_table_t* t =  apreq_cookies  ( h,  h->pool);
 
 			if(t!=NULL)
@@ -420,25 +413,20 @@ static int ap2req_cookie_make(lua_State*L) {
 				}
 				else
 				{
-					/*
+					const apr_array_header_t *arr = apr_table_elts(t);
 					int i;
-					const char* key;
-					apr_ssize_t klen;
 					lua_newtable(L);
-					
-					for(i=0; i<t->nelts; i++)
-						iter!=NULL;
-						iter=apr_hash_next(iter))
+					for(i=0;i<arr->nelts;i++)
 					{
-						apreq_cookie_t* p;
-						apr_hash_this(iter,&key,&klen,NULL);
-						lua_pushlstring(L,key,klen);
-						p = apreq_jar_get  (h,  key);
-						PUSH_COOKIE_OBJECT(p);
+						struct apr_table_entry_t e = APR_ARRAY_IDX(arr,i,struct apr_table_entry_t);
+						apreq_cookie_t *c;
+						lua_pushstring(L,e.key);
+						c = apreq_jar_get  (h,  e.key);
+						PUSH_COOKIE_OBJECT(c);
 						lua_settable(L,-3);
 					}
-					*/
-					lua_pushnil(L);
+
+
 				}
 				return 1;
 			}else
@@ -448,11 +436,9 @@ static int ap2req_cookie_make(lua_State*L) {
 			lua_pushinteger(L,rc);
 			return 2;
 		}
-	}else if(lua_isnil(L,3))
+	}else if(lua_isstring(L,3))
 	{
-		c = apreq_value_to_cookie(value);
-	}else{
-		name = luaL_checklstring(L,3, &nlen);
+		name = luaL_checklstring(L,2, &nlen);
 		value = luaL_checklstring(L,3, &vlen);
 		c = apreq_cookie_make(h->pool, name, nlen, value, vlen);
 		if(lua_istable(L,4))
@@ -527,9 +513,29 @@ static int ap2req_cookie_make(lua_State*L) {
 			}
 			lua_pop(L,1);
 		}
+	}else{
+		if(lua_isnoneornil(L,3))
+		{
+			apreq_cookie_t *c;
+			name = luaL_checklstring(L,2, &nlen);
+			c = apreq_jar_get  (h,  name);
+		}else{
+			int header = lua_toboolean(L,3);
+			if(!header){
+				value = luaL_checklstring(L,2, &vlen);
+				c = apreq_value_to_cookie(value);
+			}else{
+				apr_status_t rc;
+				apr_table_t *jar = apr_table_make(h->pool, APREQ_DEFAULT_NELTS);
+				value = luaL_checkstring(L,2);
+				rc = apreq_parse_cookie_header(h->pool, jar, value);
+				if(rc==APR_SUCCESS) {
+					ap_lua_push_apr_table(L, jar);
+				}
+				return ap2req_push_status(L, rc);
+			}
+		}
 	}
-
-	
 	return PUSH_COOKIE_OBJECT(c);
 }
 
@@ -948,8 +954,6 @@ int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
     lua_pop(L, 1);
     assert(dispatch);
 
-    /* add field */
-    apr_hash_set(dispatch, "parse_cookie_header", APR_HASH_KEY_STRING, ml_makefun(&ap2req_parse_cookie_header, APL_REQ_FUNTYPE_LUACFUN, p));
     /* cookies function */
     apr_hash_set(dispatch, "cookie", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
 
