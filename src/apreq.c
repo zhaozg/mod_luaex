@@ -389,16 +389,70 @@ static int ap2req_parse_cookie_header(lua_State*L) {
 	return ap2req_push_status(L, rc);
 }
 
+
 static int ap2req_cookie_make(lua_State*L) {
 	size_t nlen, vlen;
 	apreq_cookie_t *c = NULL;
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* name = luaL_checklstring(L,2,&nlen);
+	const char* name = NULL;
 	const char* value = NULL;
-	if(lua_isnil(L,3))
+	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
+	if(lua_isnil(L,2) || lua_isboolean(L,2))
+	{
+		if(lua_isnil(L,2)){
+			apr_table_t* t =  apreq_cookies  ( h,  h->pool);
+
+			if(t!=NULL)
+			{
+				ap_lua_push_apr_table(L,t);
+			}else
+			{
+				lua_pushnil(L);
+			}
+			return 1;
+		}else{
+			int obj = lua_toboolean(L,2);
+			apr_table_t *t;
+			apr_status_t rc = apreq_jar  ( h,  &t);
+			if(rc==APR_SUCCESS)
+			{
+				if(!obj){
+					ap_lua_push_apr_table(L,t);
+				}
+				else
+				{
+					/*
+					int i;
+					const char* key;
+					apr_ssize_t klen;
+					lua_newtable(L);
+					
+					for(i=0; i<t->nelts; i++)
+						iter!=NULL;
+						iter=apr_hash_next(iter))
+					{
+						apreq_cookie_t* p;
+						apr_hash_this(iter,&key,&klen,NULL);
+						lua_pushlstring(L,key,klen);
+						p = apreq_jar_get  (h,  key);
+						PUSH_COOKIE_OBJECT(p);
+						lua_settable(L,-3);
+					}
+					*/
+					lua_pushnil(L);
+				}
+				return 1;
+			}else
+			{
+				lua_pushnil(L);
+			}
+			lua_pushinteger(L,rc);
+			return 2;
+		}
+	}else if(lua_isnil(L,3))
 	{
 		c = apreq_value_to_cookie(value);
 	}else{
+		name = luaL_checklstring(L,3, &nlen);
 		value = luaL_checklstring(L,3, &vlen);
 		c = apreq_cookie_make(h->pool, name, nlen, value, vlen);
 		if(lua_istable(L,4))
@@ -745,53 +799,6 @@ static int ap2req_brigade_limit(lua_State*L)
 	}
 }
 
-static int ap2req_cookies(lua_State*L)
-{
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	apr_table_t* t =  apreq_cookies  ( h,  h->pool);
-
-	if(t!=NULL)
-	{
-		ap_lua_push_apr_table(L,t);
-	}else
-	{
-		lua_pushnil(L);
-	}
-	return 1;
-}
-
-static int ap2req_jar(lua_State *L)
-{
-	apr_table_t *t;
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-
-	apr_status_t rc = apreq_jar  ( h,  &t);
-	if(rc==APR_SUCCESS)
-	{
-        ap_lua_push_apr_table(L,t);
-	}else
-	{
-		lua_pushnil(L);
-	}
-	lua_pushinteger(L,rc);
-	return 2;
-}
-
-static int ap2req_jar_get(lua_State*L)
-{
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* name = luaL_checkstring(L,2);
-
-	apreq_cookie_t* p = apreq_jar_get  (h,  name );
-
-	if(p)
-	{
-        PUSH_COOKIE_OBJECT(p);
-	}else
-		lua_pushnil(L);
-	return 1;
-};
-
 
 static int ap2req_param(lua_State *L)
 {
@@ -943,6 +950,7 @@ int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
 
     /* add field */
     apr_hash_set(dispatch, "parse_cookie_header", APR_HASH_KEY_STRING, ml_makefun(&ap2req_parse_cookie_header, APL_REQ_FUNTYPE_LUACFUN, p));
+    /* cookies function */
     apr_hash_set(dispatch, "cookie", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
 
     apr_hash_set(dispatch, "param_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_make, APL_REQ_FUNTYPE_LUACFUN, p));
@@ -954,14 +962,11 @@ int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
     apr_hash_set(dispatch, "upload", APR_HASH_KEY_STRING, ml_makefun(&ap2req_upload, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "uploads", APR_HASH_KEY_STRING, ml_makefun(&ap2req_uploads, APL_REQ_FUNTYPE_LUACFUN, p));
 
-    apr_hash_set(dispatch, "jar", APR_HASH_KEY_STRING, ml_makefun(&ap2req_jar, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "args", APR_HASH_KEY_STRING, ml_makefun(&ap2req_args, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "body", APR_HASH_KEY_STRING, ml_makefun(&ap2req_body, APL_REQ_FUNTYPE_LUACFUN, p));
 
     apr_hash_set(dispatch, "param", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "params", APR_HASH_KEY_STRING, ml_makefun(&ap2req_params, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "cookies", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookies, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "jar_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_jar_get, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "args_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_args_get, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "body_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_body_get, APL_REQ_FUNTYPE_LUACFUN, p));
 
