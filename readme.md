@@ -27,6 +27,24 @@ mod_luaex is a module for apache2, which extend mod_lua to support socache, sess
   1) change setting in config.win
   2) nmake -f makefile.win
 
+## API
+
+  mod_luaex extends mod_lua in apache, which add more apis, e.g. apreq, apr-dbd, and so on.
+
+### cookie
+  1) r:cookie('key','value'[, {}]   --will make a new cookie
+      option table support below params
+      path;        /**< Restricts url path */
+      domain;      /**< Restricts server domain */
+      port;        /**< Restricts server port */
+      comment;     /**< RFC cookies may send a comment */
+      commentURL;  /**< RFC cookies may place an URL here */
+      max_age;     /**< total duration of cookie: -1 == session */
+      flags;       /**< charsets, taint marks, app-specific bits */
+      charsets, tainted, secure
+    r:cookie('cookiestring')        --will parse cookie string and make a new cookie
+
+   
 ## Status
 
 ## Contact

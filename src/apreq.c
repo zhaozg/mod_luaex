@@ -346,30 +346,27 @@ static int cookie_index(lua_State*L) {
 		}
 		else if(strcmp(key,"tainted")==0)
 		{
-			unsigned falgs = lua_toboolean(L, 3);
-			if(falgs!=0)
+			unsigned flags = lua_toboolean(L, 3);
+			if(flags!=0)
 				apreq_cookie_tainted_on(c);
 			else
 				apreq_cookie_tainted_off(c);
 		}
 		else if(strcmp(key,"flags")==0)
-			lua_pushinteger(L,c->flags);
-		else if(strcmp(key,"value")==0)
-			ap2req_pushvalue(L,&c->v);
-		else 
-			lua_pushnil(L);
+		{
+			c->flags = lua_toboolean(L, 3);
+		}
 	}
 	return 0;
 }
 
 static luaL_reg cookie_mlibs[] = {
-	{"__index",		cookie_index},
+	{"__index",	cookie_index},
 	{"__newindex",	cookie_index},
 	{"__tostring",  cookie_as_string},
 
 	{NULL,          NULL}
 };
-
 
 
 /*
@@ -392,25 +389,94 @@ static int ap2req_parse_cookie_header(lua_State*L) {
 	return ap2req_push_status(L, rc);
 }
 
-static int ap2req_value_to_cookie(lua_State*L) {
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* value = luaL_checkstring(L,2);
-	apreq_cookie_t *c = apreq_value_to_cookie(value);
-
-    return PUSH_COOKIE_OBJECT(c);
-}
-
 static int ap2req_cookie_make(lua_State*L) {
 	size_t nlen, vlen;
+	apreq_cookie_t *c = NULL;
 	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
 	const char* name = luaL_checklstring(L,2,&nlen);
-	const char* value = luaL_checklstring(L,3, &vlen);
-	apreq_cookie_t *c = NULL;
-	nlen = luaL_optint(L,4, nlen);
-	vlen = luaL_optint(L,5, vlen);
+	const char* value = NULL;
+	if(lua_isnil(L,3))
+	{
+		c = apreq_value_to_cookie(value);
+	}else{
+		value = luaL_checklstring(L,3, &vlen);
+		c = apreq_cookie_make(h->pool, name, nlen, value, vlen);
+		if(lua_istable(L,4))
+		{
+			lua_getfield(L,-1,"path");
+			c->path = (char*)luaL_optstring(L,-1,NULL);
+			lua_pop(L,1);
 
-	c = apreq_cookie_make(h->pool, name, nlen, value, vlen);
-    return PUSH_COOKIE_OBJECT(c);
+			lua_getfield(L,-1,"domain");
+			c->domain = (char*)luaL_optstring(L,-1,NULL);
+			lua_pop(L,1);
+
+			lua_getfield(L,-1,"port");
+			c->port = (char*)luaL_optstring(L,-1,NULL);
+			lua_pop(L,1);
+
+			lua_getfield(L,-1,"comment");
+			c->comment = (char*)luaL_optstring(L,-1,NULL);
+			lua_pop(L,1);
+
+			lua_getfield(L,-1,"commentURL");
+			c->commentURL = (char*)luaL_optstring(L,-1,NULL);
+			lua_pop(L,1);
+
+
+			lua_getfield(L,-1,"version");
+			if(!lua_isnil(L,-1)) apreq_cookie_version_set(c, luaL_checkint(L,-1));
+			lua_pop(L,1);
+
+			lua_getfield(L,-1,"expires");
+			if(!lua_isnil(L,-1))
+			{
+				char expires[APR_RFC822_DATE_LEN];
+				if(lua_isstring(L,-1))
+				{
+					const char* exp = lua_tostring(L, -1);
+					apreq_cookie_expires(c, exp);
+				}else
+				{
+					apr_rfc822_date(expires, luaL_checkint(L, -1));
+					apreq_cookie_expires(c, expires);
+				}
+			}
+			lua_pop(L,1);
+
+			lua_getfield(L,-1,"secure");
+			if(!lua_isnil(L,-1))
+			{
+				int falgs = lua_toboolean(L, -1);
+				if(falgs!=0)
+					apreq_cookie_secure_on(c);
+				else
+					apreq_cookie_secure_off(c);
+			}
+			lua_pop(L,1);
+
+
+			lua_getfield(L,-1,"tainted");
+			if(!lua_isnil(L,-1))
+			{
+				int falgs = lua_toboolean(L, -1);
+				if(falgs!=0)
+					apreq_cookie_tainted_on(c);
+				else
+					apreq_cookie_tainted_off(c);
+			}
+			lua_pop(L,1);
+
+			lua_getfield(L, -1, "flags");
+			if(!lua_isnil(L, -1)){
+				c->flags = luaL_checkint(L,-1);
+			}
+			lua_pop(L,1);
+		}
+	}
+
+	
+	return PUSH_COOKIE_OBJECT(c);
 }
 
 /************************************************************************/
@@ -686,7 +752,7 @@ static int ap2req_cookies(lua_State*L)
 
 	if(t!=NULL)
 	{
-        ap_lua_push_apr_table(L,t);
+		ap_lua_push_apr_table(L,t);
 	}else
 	{
 		lua_pushnil(L);
@@ -877,10 +943,8 @@ int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
 
     /* add field */
     apr_hash_set(dispatch, "parse_cookie_header", APR_HASH_KEY_STRING, ml_makefun(&ap2req_parse_cookie_header, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "value_to_cookie", APR_HASH_KEY_STRING, ml_makefun(&ap2req_value_to_cookie, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "cookie_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "cookie", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
 
-    apr_hash_set(dispatch, "cookie_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "param_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_make, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "param_decode", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_decode, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "param_as_string", APR_HASH_KEY_STRING, ml_makefun(&ap2req_params_as_string, APL_REQ_FUNTYPE_LUACFUN, p));
