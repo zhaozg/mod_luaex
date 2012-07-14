@@ -516,9 +516,10 @@ static int ap2req_cookie_make(lua_State*L) {
 	}else{
 		if(lua_isnoneornil(L,3))
 		{
-			apreq_cookie_t *c;
+			apr_table_t* t =  apreq_cookies  ( h,  h->pool);
 			name = luaL_checklstring(L,2, &nlen);
-			c = apreq_jar_get  (h,  name);
+			lua_pushstring(L,apr_table_get(t,name));
+			return 1;
 		}else{
 			int header = lua_toboolean(L,3);
 			if(!header){
@@ -536,7 +537,10 @@ static int ap2req_cookie_make(lua_State*L) {
 			}
 		}
 	}
-	return PUSH_COOKIE_OBJECT(c);
+	if(c)
+		return PUSH_COOKIE_OBJECT(c);
+	else
+		return 0;
 }
 
 /************************************************************************/
