@@ -1,6 +1,6 @@
 # An apache module to extend mod_lua
 
-mod_luaex is a module for apache2, which extend mod_lua to support socache, session, dbd, filter and other, so more flexible.
+mod_luaex is a module for apache2, which extend mod_lua(http://httpd.apache.org/docs/2.4/mod/mod_lua.html) to support socache, session, dbd, filter and other, so more flexible.
 
 
 ## Introduce
