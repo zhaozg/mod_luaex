@@ -33,9 +33,9 @@ mod_luaex is a module for apache2, which extend mod_lua to support socache, sess
 
 ### cookie
 
-#### r:cookie()	  -- it will return an cookies key and value as apr_table object
+#### r:cookie()	  -- it will return an apr_table with cookie key and value 
 #### r:cookie(boolean)
-	if arg false, it will return an cookies key and value as apr_table object
+	if arg is false, it will return an cookies key and value as apr_table object
 	if arg is true, it will return an table,name and cookie object keypaire
 #### r:cookie('key','value'[, {}]   --will make a new cookie
       option table support below params
@@ -51,7 +51,17 @@ mod_luaex is a module for apache2, which extend mod_lua to support socache, sess
 #### r:cookie('cookievalstr',false) --will parse cookie string and make a new cookie
 #### r:cookie('cookiestrinheader',true) -- will return a table which store cookie objects
 
-   
+### param
+
+#### r:param()	    -- it will return an apr_table with param key and value
+#### r:param(boolean)
+         if arg is false, it will return an apr_table with query key and value, apreq_args
+         if arg is true, it will return an apr_table with post key and value, apreq_body
+#### r:param('key','value') -- it will make a param object wich key and value
+#### r:param(key)   -- it will return an param object
+#### r:param(key,false)	 -- it will return an query param object
+#### r:param(key,true)   -- it will return an post param object
+
 ## Status
 
 ## Contact

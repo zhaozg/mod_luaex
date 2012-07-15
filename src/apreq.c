@@ -138,7 +138,7 @@ int ap2req_encode(lua_State*L) {
 //FIXME: use update request pointer
 int ap2req_escape(lua_State*L) {
 	apr_size_t slen;
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
+	request_rec *r = CHECK_REQUEST_OBJECT(1);
 	const char* src = luaL_checklstring(L,2,&slen);
 
 	lua_pushstring(L,apreq_escape(r->pool, src, slen));
@@ -158,9 +158,9 @@ int ap2req_header_attribute(lua_State*L) {
 	{
 		lua_pushlstring(L,val,vlen);
 		lua_pushinteger(L,vlen);
-        return 2;
+		return 2;
 	}
-    return ap2req_push_status(L, rc);
+	return ap2req_push_status(L, rc);
 }
 
 int ap2req_index(lua_State*L) {
@@ -518,7 +518,10 @@ static int ap2req_cookie_make(lua_State*L) {
 		{
 			apr_table_t* t =  apreq_cookies  ( h,  h->pool);
 			name = luaL_checklstring(L,2, &nlen);
-			lua_pushstring(L,apr_table_get(t,name));
+			if(t)
+				lua_pushstring(L,apr_table_get(t,name));
+			else
+				lua_pushnil(L);
 			return 1;
 		}else{
 			int header = lua_toboolean(L,3);
@@ -557,11 +560,11 @@ static int param_index(lua_State*L)
 			lua_pushinteger(L, apreq_param_charset_get(p));
 		}else if(strcmp(key,"encode")==0)
 		{
-            //FIXME:
-            apr_pool_t* pool = NULL;
-            apr_pool_create(&pool, NULL);
-            lua_pushstring(L,apreq_param_encode(pool, p));
-            apr_pool_destroy(pool);
+		    //FIXME:
+		    apr_pool_t* pool = NULL;
+		    apr_pool_create(&pool, NULL);
+		    lua_pushstring(L,apreq_param_encode(pool, p));
+		    apr_pool_destroy(pool);
 		}else if(strcmp(key,"info")==0)
 		{
 			if (p->info)
@@ -574,7 +577,7 @@ static int param_index(lua_State*L)
 		}else if(strcmp(key,"upload")==0)
 		{
 			if (p->upload) {
-                PUSH_BUCKETBRIGADE_OBJECT(p->upload);
+				PUSH_BUCKETBRIGADE_OBJECT(p->upload);
 			}else
 				lua_pushnil(L);
 		}else if(strcmp(key,"flags")==0) {
@@ -607,24 +610,96 @@ static int param_tostring(lua_State*L){
     return 1;
 }
 static luaL_reg param_mlibs[] = {
-	{"__tostring",	    param_tostring},
-	{"__index",		    param_index},
+	{"__tostring",		param_tostring},
+	{"__index",		param_index},
 	{"__newindex",		param_index},
 
 	{NULL, NULL}
 };
 
-//////////////////////////////////////////////////////////////////////////
-static int ap2req_param_make(lua_State*L)
-{
-	size_t nlen, vlen;
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* name = luaL_checklstring(L,2,&nlen);
-	const char* value = luaL_checklstring(L,2, &vlen);
-	apreq_param_t *p = apreq_param_make(h->pool, name, nlen, value, vlen);
 
-    return PUSH_PARAM_OBJECT(p);
+
+static int ap2req_param(lua_State *L)
+{
+	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
+	int top = lua_gettop(L);
+	if(top==1){
+		apr_table_t* t = apreq_params(h,h->pool);
+
+		if(t)
+			ap_lua_push_apr_table(L,t);
+		else
+			lua_pushnil(L);
+		return 1;
+	}else{
+		if(lua_isboolean(L,2))
+		{
+			int body = lua_toboolean(L, 2);
+			apr_table_t *t = NULL;
+			apr_status_t s = APR_SUCCESS;
+			if(body){
+				s = apreq_body(h, &t);
+			}else{
+				s = apreq_args(h, &t);
+			}
+
+			if(s==APR_SUCCESS && t)
+			{
+				ap_lua_push_apr_table(L,t);
+				lua_pushboolean(L, body);
+			}else
+			{
+				lua_pushnil(L);
+				lua_pushinteger(L, s);
+			}
+
+			return 2;
+		}else{
+			const char* key = luaL_checkstring(L,2);
+
+			if(top>2){
+				if(lua_isboolean(L, 3))
+				{
+					int body = lua_toboolean(L, 3);
+					apreq_param_t* p = NULL;
+					if(body){
+						p = apreq_args_get(h,  key);
+					}else{
+						p = apreq_body_get(h,  key);
+					}
+
+					if(p)
+					{
+						PUSH_PARAM_OBJECT(p);
+					}else
+						lua_pushnil(L);
+					return 1;
+				}else if(lua_isstring(L, 3))
+				{
+					size_t nlen, vlen;
+					const char* name = luaL_checklstring(L,2,&nlen);
+					const char* value = luaL_checklstring(L,2, &vlen);
+					apreq_param_t *p = apreq_param_make(h->pool, name, nlen, value, vlen);
+
+					return PUSH_PARAM_OBJECT(p);
+				}
+			}else{
+				apreq_param_t* p = apreq_param  (h,  key);
+				if(p)
+				{
+					PUSH_PARAM_OBJECT(p);
+				}else
+					lua_pushnil(L);
+				return 1;
+			}
+		}
+	}
+
+	return 1;
 }
+
+//////////////////////////////////////////////////////////////////////////
+
 
 static int ap2req_param_decode(lua_State*L) {
 	size_t len;
@@ -634,7 +709,7 @@ static int ap2req_param_decode(lua_State*L) {
 	const char* word = luaL_checklstring(L, 2, &len);
 	size_t nlen = luaL_optint(L, 3, 0);
 	size_t vlen = luaL_optint(L, 4, 0);
-    //Url-decodes a name=value pair into a param.
+	//Url-decodes a name=value pair into a param.
 
 	if(nlen==0)
 	{
@@ -649,9 +724,9 @@ static int ap2req_param_decode(lua_State*L) {
 	assert(len == nlen + vlen + 1);
 
 	rc = apreq_param_decode(&p, h->pool, word, nlen, vlen);
-    if(rc==APR_SUCCESS) {
-        PUSH_PARAM_OBJECT(p);
-    } else
+	if(rc==APR_SUCCESS) {
+		PUSH_PARAM_OBJECT(p);
+	} else
 		lua_pushnil(L);
 
 	lua_pushinteger(L, rc);
@@ -698,7 +773,7 @@ static int ap2req_upload(lua_State*L) {
 
 	const apreq_param_t* p = apreq_upload  (t,  name) ;
 	if(p!=NULL){
-        PUSH_PARAM_OBJECT(p);
+		PUSH_PARAM_OBJECT(p);
 	}else
 	{
 		lua_pushnil(L);
@@ -709,81 +784,15 @@ static int ap2req_upload(lua_State*L) {
 
 static int ap2req_uploads(lua_State*L) {
 	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-    apr_table_t *t = ap_lua_check_apr_table(L, 2);
+	apr_table_t *t = ap_lua_check_apr_table(L, 2);
 
-    ap_lua_push_apr_table(L,(apr_table_t*)apreq_uploads  (t,  h->pool));
+	ap_lua_push_apr_table(L,(apr_table_t*)apreq_uploads  (t,  h->pool));
 	return 1;
 }
 
 /************************************************************************/
-/*  modlue object                                                       */
+/*  mod_luaex object                                                       */
 /************************************************************************/
-static int ap2req_args(lua_State*L)
-{
-	apr_table_t *tab;
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-
-	apr_status_t rc = apreq_args  (  h, &tab);
-	if(rc==APR_SUCCESS)
-	{
-        ap_lua_push_apr_table(L,tab);
-	}else
-	{
-		lua_pushnil(L);
-	}
-
-	lua_pushinteger(L, rc);
-	return 2;
-};
-
-static int ap2req_args_get(lua_State*L)
-{
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* name = luaL_checkstring(L,2);
-
-	apreq_param_t* p = apreq_args_get  (h,  name );
-
-	if(p)
-	{
-        PUSH_PARAM_OBJECT(p);
-	}else
-		lua_pushnil(L);
-	return 1;
-};
-
-static int ap2req_body(lua_State*L)
-{
-	apr_table_t *tab;
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-
-	apr_status_t rc = apreq_body  ( h,  &tab);
-	if(rc==APR_SUCCESS)
-	{
-        ap_lua_push_apr_table(L,tab);
-	}else
-	{
-		lua_pushnil(L);
-	}
-
-	lua_pushinteger(L, rc);
-	return 2;
-};
-
-
-static int ap2req_body_get(lua_State*L)
-{
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* name = luaL_checkstring(L,2);
-
-	apreq_param_t* p = apreq_body_get  (h,  name );
-
-	if(p)
-	{
-        PUSH_PARAM_OBJECT(p);
-	}else
-		lua_pushnil(L);
-	return 1;
-};
 
 static int ap2req_brigade_limit(lua_State*L)
 {
@@ -809,33 +818,6 @@ static int ap2req_brigade_limit(lua_State*L)
 	}
 }
 
-
-static int ap2req_param(lua_State *L)
-{
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	const char* key = luaL_checkstring(L,2);
-
-	apreq_param_t* p = apreq_param  ( h,  key);
-
-	if(p)
-	{
-        PUSH_PARAM_OBJECT(p);
-	}else
-		lua_pushnil(L);
-	return 1;
-}
-
-static int ap2req_params(lua_State*L)
-{
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	apr_table_t* t = apreq_params(h,h->pool);
-
-	if(t)
-        ap_lua_push_apr_table(L,t);
-	else
-		lua_pushnil(L);
-	return 1;
-};
 
 static int ap2req_read_limit(lua_State*L)
 {
@@ -960,23 +942,19 @@ int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
 
     /* cookies function */
     apr_hash_set(dispatch, "cookie", APR_HASH_KEY_STRING, ml_makefun(&ap2req_cookie_make, APL_REQ_FUNTYPE_LUACFUN, p));
+    /* param function */
+    apr_hash_set(dispatch, "param",  APR_HASH_KEY_STRING, ml_makefun(&ap2req_param, APL_REQ_FUNTYPE_LUACFUN, p));
+    /* upload function */
+    apr_hash_set(dispatch, "upload", APR_HASH_KEY_STRING, ml_makefun(&ap2req_upload, APL_REQ_FUNTYPE_LUACFUN, p));
+    apr_hash_set(dispatch, "uploads", APR_HASH_KEY_STRING, ml_makefun(&ap2req_uploads, APL_REQ_FUNTYPE_LUACFUN, p));
 
-    apr_hash_set(dispatch, "param_make", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_make, APL_REQ_FUNTYPE_LUACFUN, p));
+
     apr_hash_set(dispatch, "param_decode", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_decode, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "param_as_string", APR_HASH_KEY_STRING, ml_makefun(&ap2req_params_as_string, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "parse_query_string", APR_HASH_KEY_STRING, ml_makefun(&ap2req_parse_query_string, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "value_to_param", APR_HASH_KEY_STRING, ml_makefun(&ap2req_value_to_param, APL_REQ_FUNTYPE_LUACFUN, p));
 
-    apr_hash_set(dispatch, "upload", APR_HASH_KEY_STRING, ml_makefun(&ap2req_upload, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "uploads", APR_HASH_KEY_STRING, ml_makefun(&ap2req_uploads, APL_REQ_FUNTYPE_LUACFUN, p));
 
-    apr_hash_set(dispatch, "args", APR_HASH_KEY_STRING, ml_makefun(&ap2req_args, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "body", APR_HASH_KEY_STRING, ml_makefun(&ap2req_body, APL_REQ_FUNTYPE_LUACFUN, p));
-
-    apr_hash_set(dispatch, "param", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "params", APR_HASH_KEY_STRING, ml_makefun(&ap2req_params, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "args_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_args_get, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "body_get", APR_HASH_KEY_STRING, ml_makefun(&ap2req_body_get, APL_REQ_FUNTYPE_LUACFUN, p));
 
     apr_hash_set(dispatch, "brigade_limit", APR_HASH_KEY_STRING, ml_makefun(&ap2req_brigade_limit, APL_REQ_FUNTYPE_LUACFUN, p));
     apr_hash_set(dispatch, "bucket", APR_HASH_KEY_STRING, ml_makefun(&lua_apreq_bucket, APL_REQ_FUNTYPE_LUACFUN, p));
