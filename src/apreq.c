@@ -698,6 +698,42 @@ static int ap2req_param(lua_State *L)
 	return 1;
 }
 
+
+static int ap2req_upload(lua_State*L) {
+	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
+	int top = lua_gettop(L);
+	apr_table_t *t = NULL;
+	int start = 0, ret = 0;
+
+	if(lua_isuserdata(L,2))
+	{
+		t = ap_lua_check_apr_table(L, 2);
+		start = 3;
+	}else{
+		apr_status_t s = apreq_body(h, &t);
+		if(s!=APR_SUCCESS)
+			return ml_push_status(L,s);
+		start = 2;
+	}
+	if(top<start)
+	{
+		ap_lua_push_apr_table(L, (apr_table_t *)apreq_uploads  (t,  h->pool));
+		return 1;
+	}
+	while(start<=top)
+	{
+		const char* name = luaL_checkstring(L,3);
+		const apreq_param_t* p = apreq_upload(t, name);
+		if(p){
+			PUSH_PARAM_OBJECT(p);
+		}else
+			lua_pushnil(L);
+		start++;
+		ret++;
+	}
+	return ret;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 
@@ -766,29 +802,6 @@ static int ap2req_value_to_param(lua_State*L) {
 }
 
 
-static int ap2req_upload(lua_State*L) {
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	apr_table_t *t = ap_lua_check_apr_table(L, 2);
-	const char* name = luaL_checkstring(L,3);
-
-	const apreq_param_t* p = apreq_upload  (t,  name) ;
-	if(p!=NULL){
-		PUSH_PARAM_OBJECT(p);
-	}else
-	{
-		lua_pushnil(L);
-	}
-	(void*)h;
-	return 1;
-}
-
-static int ap2req_uploads(lua_State*L) {
-	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	apr_table_t *t = ap_lua_check_apr_table(L, 2);
-
-	ap_lua_push_apr_table(L,(apr_table_t*)apreq_uploads  (t,  h->pool));
-	return 1;
-}
 
 /************************************************************************/
 /*  mod_luaex object                                                       */
@@ -946,7 +959,6 @@ int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
     apr_hash_set(dispatch, "param",  APR_HASH_KEY_STRING, ml_makefun(&ap2req_param, APL_REQ_FUNTYPE_LUACFUN, p));
     /* upload function */
     apr_hash_set(dispatch, "upload", APR_HASH_KEY_STRING, ml_makefun(&ap2req_upload, APL_REQ_FUNTYPE_LUACFUN, p));
-    apr_hash_set(dispatch, "uploads", APR_HASH_KEY_STRING, ml_makefun(&ap2req_uploads, APL_REQ_FUNTYPE_LUACFUN, p));
 
 
     apr_hash_set(dispatch, "param_decode", APR_HASH_KEY_STRING, ml_makefun(&ap2req_param_decode, APL_REQ_FUNTYPE_LUACFUN, p));

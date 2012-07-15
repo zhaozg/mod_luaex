@@ -62,6 +62,16 @@ mod_luaex is a module for apache2, which extend mod_lua(http://httpd.apache.org/
 #### r:param(key,false)	 -- it will return an query param object
 #### r:param(key,true)   -- it will return an post param object
 
+### upload
+
+#### r:upload([apr_table])  
+	it will return an apr_table with param which has upload part
+	if argument apr_table not given, it will be get by apreq_body()
+#### r:upload([apr_table],...)
+	it will return multi param object which contains upload part
+	arg must be string as name
+
+
 ## Status
 
 ## Contact
