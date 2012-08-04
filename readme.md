@@ -31,7 +31,29 @@ mod_luaex is a module for apache2, which extend mod_lua(http://httpd.apache.org/
 
   mod_luaex extends mod_lua in apache, which add more apis, e.g. apreq, apr-dbd, and so on.
 
-### cookie
+### The fields of request\_rec supplied mod\_lua.	
+
+#### functions
+    puts, write, parseargs, parsebody,add_output_filter*,construct_url,escape_html,ssl_var_lookup,
+    debug,info,notice,warn,err,crit,alert,emerg,trace1,trace2,trace3,trace4,trace5,trace6,trace7,trace8
+
+####strings
+    document_root,protocol,content_type,content_encoding,ap_auth_type,unparsed_uri,filename,
+    canonical_filename,path_info,args,handler,hostname,req_uri_field,uri,the_request,method,proxyreq
+
+####boolean
+    is_https,assbackwards
+
+####integer
+    status
+####table
+    headers_in,headers_out,err_headers_out,notes,subprocess_env
+
+### The fields of request\_rec supplied mod\_luaex.	
+
+
+
+### cookie object
 
 #### r:cookie()	  -- it will return an apr_table with cookie key and value 
 #### r:cookie(boolean)
