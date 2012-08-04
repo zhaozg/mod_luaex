@@ -480,7 +480,7 @@ static int apreq_post_init(apr_pool_t *p, apr_pool_t *plog,
     }
     return OK;
 }
-apr_status_t ml_register_hooks (apr_pool_t *p);
+
 static void register_hooks (apr_pool_t *p)
 {
     /* APR_HOOK_FIRST because we want other modules to be able to

@@ -59,6 +59,7 @@ apr_status_t ml_filter(ap_filter_t *f,
 
 void ml_filter_make_context(ap_filter_t *f);
 void ml_filter_init_context(ap_filter_t *f);
+apr_status_t ml_register_hooks (apr_pool_t *p);
 
 APR_INLINE
 static void ml_filter_relocate(ap_filter_t *f)

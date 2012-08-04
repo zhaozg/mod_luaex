@@ -4,7 +4,7 @@
 #include <mod_session.h>
 #include <mod_ssl.h>
 #include <mod_dbd.h>
-#include <mod_so.h>
+
 
 static APR_OPTIONAL_FN_TYPE(ap_session_get)  *ap_session_get = NULL;
 static APR_OPTIONAL_FN_TYPE(ap_session_set)  *ap_session_set = NULL;

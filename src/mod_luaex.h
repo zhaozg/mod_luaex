@@ -166,12 +166,14 @@ apr_status_t ml_register_hooks (apr_pool_t *p);
 /************************************************************************/
 
 #include <apr_dbd.h>
-#include "mod_dbd.h"
-#include "mod_luaex.h"
 
 #include <ap_provider.h>
 #include <ap_slotmem.h>
 #include <ap_socache.h>
+
+#include <mod_so.h>
+#include <mod_dbd.h>
+#include "mod_luaex.h"
 
 #ifndef STORAGE_CACHE_TIMEOUT
 #define STORAGE_CACHE_TIMEOUT  600
@@ -217,7 +219,8 @@ typedef struct {
     server_rec *s;
 }ml_dbd;
 
-apreq_handle_t* ml_r2apreq(lua_State*L,int n);
+
+extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 
 #define CHECK_REQUEST_OBJECT(x)  ml_check_object(L, x,"Apache2.Request")
 #define CHECK_CONNECTION_OBJECT(x)  ml_check_object(L, x,"Apache2.Connection")
@@ -281,6 +284,9 @@ int ml_reslist_invalidate(lua_State*L);
 #endif
 
 void pstack_dump(lua_State *L,const char *msg);
+int ml_apache2_extends(lua_State*L);
+void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p);
+apreq_handle_t* ml_r2apreq(lua_State*L,int n);
 
 #endif
 
