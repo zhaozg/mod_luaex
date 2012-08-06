@@ -67,7 +67,7 @@ static int brigade_consume(lua_State*L)
 static int brigade_length(lua_State*L)
 {
 	apr_bucket_brigade *bb = (apr_bucket_brigade*)CHECK_BUCKETBRIGADE_OBJECT(1);
-	int read_all = luaL_checkint(L,2);
+	int read_all = lua_isnoneornil(L,2) ? 1 : lua_toboolean(L, 2);
 	apr_off_t length = 0;
 
 	apr_status_t rc = apr_brigade_length(bb, read_all, &length);
@@ -79,16 +79,21 @@ static int brigade_length(lua_State*L)
 static int brigade_flatten(lua_State*L)
 {
 	apr_bucket_brigade *bb = (apr_bucket_brigade*)CHECK_BUCKETBRIGADE_OBJECT(1);
-	apr_size_t len = luaL_checkint(L,2);
-	apr_status_t rc;
-
-	char* buf = apr_bucket_alloc(len, bb->bucket_alloc);
-
-
-	rc = apr_brigade_flatten(bb, buf, &len);
+	apr_off_t off = luaL_optinteger(L,2, 0);
+	apr_status_t rc = off==0 ? 0 : apr_brigade_length(bb, 1, &off);
+	apr_size_t len = (apr_size_t)off;
 	if(rc==APR_SUCCESS)
 	{
-		lua_pushlstring(L,buf, len);
+		char* buf = apr_bucket_alloc(len, bb->bucket_alloc);
+
+		rc = apr_brigade_flatten(bb, buf, &len);
+		if(rc==APR_SUCCESS)
+		{
+			lua_pushlstring(L,buf, len);
+		}else
+		{
+			lua_pushnil(L);
+		}
 		apr_bucket_free(buf);
 	}else
 	{
