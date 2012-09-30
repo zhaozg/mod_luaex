@@ -287,6 +287,6 @@ void pstack_dump(lua_State *L,const char *msg);
 int ml_apache2_extends(lua_State*L);
 void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p);
 apreq_handle_t* ml_r2apreq(lua_State*L,int n);
-
+req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool);
 #endif
 

@@ -23,6 +23,7 @@
 #include "apr_buckets.h"
 #include "http_request.h"
 #include "apr_strings.h"
+#include "http_connection.h"
 
 #include "apreq_error.h"
 #include "apreq_util.h"
@@ -149,7 +150,8 @@ static const command_rec apreq_cmds[] =
 				  "constructor and destructor function must be exist in LuaScript"
 				  "min, smax, hmax are option value, default is 0, 16, 16"),
 #endif
-
+    AP_INIT_TAKE2("Luaex_Handle", ml_set_server_handle, NULL, OR_ALL,
+                  "Set server handle file and function"),
     { NULL }
 };
 
@@ -493,12 +495,11 @@ static void register_hooks (apr_pool_t *p)
      */
     ap_hook_post_config(apreq_post_init, NULL, NULL, APR_HOOK_LAST);
 
+    ap_hook_process_connection(ml_process_connection,NULL,NULL, APR_HOOK_MIDDLE);
     ap_register_input_filter(MLE_FILTER_NAME, ml_filter, apreq_filter_init, AP_FTYPE_PROTOCOL-1);
     
     ml_register_hooks(p);
 }
-
-
 
 /** @} */
 
@@ -508,7 +509,7 @@ module AP_MODULE_DECLARE_DATA luaex_module = {
 	STANDARD20_MODULE_STUFF,
 	apreq_create_dir_config,
 	apreq_merge_dir_config,
-	NULL,
+	ml_create_server,
 	NULL,
 	apreq_cmds,
 	register_hooks,

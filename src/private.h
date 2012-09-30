@@ -114,6 +114,13 @@ APR_DECLARE_OPTIONAL_FN(APREQ_DECLARE(apreq_handle_t *),
 
 /** @} */
 
+void *ml_create_server(apr_pool_t *p, server_rec *s);
+int ml_process_connection(conn_rec *c);
+const char *ml_set_server_handle(cmd_parms *cmd, void *_cfg,
+    const char *name,
+    const char *file);
+int ml_call(lua_State *L, const char *func, const char *sig, ...) ;
+
 #ifdef __cplusplus
 }
 #endif

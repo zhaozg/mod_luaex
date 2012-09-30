@@ -937,7 +937,7 @@ static int ml_functions(lua_State *L)
 }
 
 int lua_apreq_bucket (lua_State *L);
-req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool);
+
 int ml_luaopen_apreq(lua_State *L, apr_pool_t *p) {
     apr_hash_t *dispatch;
     luaL_register(L, "apreq", apreq_libs);
