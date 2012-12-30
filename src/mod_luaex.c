@@ -81,7 +81,7 @@ void *ml_check_object(lua_State *L, int index, const char*metaname) {
     return lua_unboxpointer(L, index);
 }
 
-int  ml_push_object(lua_State*L, void* data, const char*metaname) {
+int  ml_push_object(lua_State*L,const void* data, const char*metaname) {
     lua_boxpointer(L, data);
     luaL_getmetatable(L,metaname);
     lua_setmetatable(L, -2);
@@ -90,14 +90,14 @@ int  ml_push_object(lua_State*L, void* data, const char*metaname) {
 
 
 int ml_push_status(lua_State*L, apr_status_t status) {
-    char err[MAX_PATH];
+    char err[APR_PATH_MAX];
     if(status==APR_SUCCESS) {
         lua_pushboolean(L,1);
         return 1;
     }
     lua_pushnil(L);
     lua_pushinteger(L, status);
-    apr_strerror(status,err, MAX_PATH);
+    apr_strerror(status,err, APR_PATH_MAX);
     lua_pushstring(L, err);
     return 3;
 }
@@ -323,7 +323,7 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
 
 	struct dir_config *d = ap_get_module_config(r->per_dir_config, &luaex_module);
 
-	if(apr_table_get(d->filter,f->frec->name)==NULL || apr_pool_userdata_get(&L,ML_OUTPUT_FILTER_KEY4LUA, r->pool) || L==NULL)
+	if(apr_table_get(d->filter,f->frec->name)==NULL || apr_pool_userdata_get((void**)&L,ML_OUTPUT_FILTER_KEY4LUA, r->pool) || L==NULL)
 	{
 		ap_remove_output_filter(f);
 		return ap_pass_brigade(f->next, bb);
@@ -395,7 +395,7 @@ apreq_handle_t* ml_r2apreq(lua_State*L,int n){
     apr_status_t s;
     request_rec *r = CHECK_REQUEST_OBJECT(n);
     apreq_handle_t* h=NULL;
-    s = apr_pool_userdata_get(&h,"apreq_handle_t*",r->pool);
+    s = apr_pool_userdata_get((void**)&h,"apreq_handle_t*",r->pool);
     if(s==OK){
 	    if(h==NULL)
 	    {

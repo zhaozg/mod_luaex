@@ -69,7 +69,6 @@ static const ml_constants status_tabs[] = {
 	{ NULL, 0 }
 };
 
-static 
 void ml_define_constants (lua_State *L, const  ml_constants tab[]) {
 	int i;
 	for (i = 0; tab[i].name != NULL; i++) {
@@ -96,7 +95,6 @@ static int lua_ap_module_info(lua_State *L)
     const char* moduleName = luaL_checkstring(L, 1);
     module* mod = ap_find_linked_module(moduleName);
     if (mod) {
-        int i = 0;
         const command_rec *cmd;
         lua_newtable(L);
         lua_pushstring(L, "commands");
@@ -306,21 +304,7 @@ static int lua_ap_scoreboard_worker(lua_State *L)
 		lua_pushstring(L, "vhost");
 		lua_pushstring(L, ws_record->vhost);
 		lua_settable(L, -3);
-#ifdef HAVE_TIMES
 
-		lua_newtable(L);
-		setnum("tm_sec", tm_sec);     /* seconds after the minute - [0,59] */
-		setnum("tm_min", tm_min);     /* minutes after the hour - [0,59] */
-		setnum("tm_hour", tm_hour);    /* hours since midnight - [0,23] */
-		setnum("tm_mday", tm_mday);    /* day of the month - [1,31] */
-		setnum("tm_mon", tm_mon);     /* months since January - [0,11] */
-		setnum("tm_year", tm_year);    /* years since 1900 */
-		setnum("tm_wday", tm_wday);    /* days since Sunday - [0,6] */
-		setnum("tm_yday", tm_yday);    /* days since January 1 - [0,365] */
-		setnum("tm_isdst", tm_isdst);   /* daylight savings time flag */
-
-		lua_setfield(L,-2,"times");
-#endif
 		return 1;
 	}
 	return 0;

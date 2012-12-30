@@ -87,13 +87,6 @@ static int req_get_remote_logname (lua_State *L) {
 	return 1;
 }
 
-static int req_auth_name (lua_State *L) {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-	lua_pushstring (L, ap_auth_name(r));
-	return 1;
-}
-
 static int req_get_basic_auth_pw(lua_State *L) {
 	request_rec *req = CHECK_REQUEST_OBJECT(1);
 	const char *pw;

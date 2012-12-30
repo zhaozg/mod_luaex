@@ -404,12 +404,12 @@ static int ap2req_cookie_make(lua_State*L) {
 			return 1;
 		}else{
 			int obj = lua_toboolean(L,2);
-			apr_table_t *t;
+			const apr_table_t *t;
 			apr_status_t rc = apreq_jar  ( h,  &t);
 			if(rc==APR_SUCCESS)
 			{
 				if(!obj){
-					ap_lua_push_apr_table(L,t);
+					ap_lua_push_apr_table(L,(apr_table_t*)t);
 				}
 				else
 				{
@@ -635,7 +635,7 @@ static int ap2req_param(lua_State *L)
 		if(lua_isboolean(L,2))
 		{
 			int body = lua_toboolean(L, 2);
-			apr_table_t *t = NULL;
+			const apr_table_t *t = NULL;
 			apr_status_t s = APR_SUCCESS;
 			if(body){
 				s = apreq_body(h, &t);
@@ -645,7 +645,7 @@ static int ap2req_param(lua_State *L)
 
 			if(s==APR_SUCCESS && t)
 			{
-				ap_lua_push_apr_table(L,t);
+				ap_lua_push_apr_table(L,(apr_table_t*)t);
 				lua_pushboolean(L, body);
 			}else
 			{
@@ -702,7 +702,7 @@ static int ap2req_param(lua_State *L)
 static int ap2req_upload(lua_State*L) {
 	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
 	int top = lua_gettop(L);
-	apr_table_t *t = NULL;
+	const apr_table_t *t = NULL;
 	int start = 0, ret = 0;
 
 	if(lua_isuserdata(L,2))
@@ -795,9 +795,8 @@ static int ap2req_parse_query_string(lua_State*L) {
 static int ap2req_value_to_param(lua_State*L) {
     apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
     const char* value = luaL_checkstring(L,2);
-
     apreq_param_t* p = apreq_value_to_param  (value); 
-
+    (void*)h;
     return PUSH_PARAM_OBJECT(p);
 }
 
@@ -825,9 +824,13 @@ static int ap2req_brigade_limit(lua_State*L)
 		apr_size_t bytes = luaL_checkint(L,2);
 
 		apr_status_t rc = apreq_brigade_limit_set  (h, bytes);
-		//lua_pushinteger(L, bytes);
-		//lua_pushinteger(L, rc);
-		return 0;
+		if(rc==APR_SUCCESS)
+		    lua_pushboolean(L,1);
+		else{
+		    lua_pushnil(L);
+		    lua_pushinteger(L, rc);
+		}
+		return 2;
 	}
 }
 
@@ -928,7 +931,7 @@ static int ml_functions(lua_State *L)
 	    apr_ssize_t klen;
 	    lua_CFunction func;
 
-	    apr_hash_this(iter, &key, &klen, (void**)&func);
+	    apr_hash_this(iter, (const void**)&key, &klen, (void**)&func);
 	    lua_pushlstring(L,key,klen);
 	    lua_pushcfunction(L,func);
 	    lua_rawset(L,-3);

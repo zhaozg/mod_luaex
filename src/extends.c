@@ -61,7 +61,7 @@ int ml_session_load(lua_State* L) {
         apr_status_t status;
         request_rec *r = CHECK_REQUEST_OBJECT(1);
         session_rec *sess = NULL;
-        status = apr_pool_userdata_get(&sess,"ml_session",r->pool);
+        status = apr_pool_userdata_get((void**)&sess,"ml_session",r->pool);
         if (status==APR_SUCCESS)
         {
             if (sess==NULL) {
@@ -85,7 +85,7 @@ int ml_session_save(lua_State* L) {
         apr_status_t status;
         session_rec *sess;
         request_rec *r = CHECK_REQUEST_OBJECT(1);
-        status = apr_pool_userdata_get(&sess,"ml_session",r->pool);
+        status = apr_pool_userdata_get((void**)&sess,"ml_session",r->pool);
         if (status==APR_SUCCESS) {
             if(sess!=NULL) {
                 status = ap_session_save(r, sess);
@@ -108,7 +108,7 @@ int ml_session_get(lua_State* L) {
         apr_status_t status;
         session_rec *sess;
         request_rec *r = CHECK_REQUEST_OBJECT(1);
-        status = apr_pool_userdata_get(&sess,"ml_session",r->pool);
+        status = apr_pool_userdata_get((void**)&sess,"ml_session",r->pool);
         if (status==APR_SUCCESS) {
             const char* key = luaL_checkstring(L, 2);
             const char* val = NULL;
@@ -129,7 +129,7 @@ int ml_session_set(lua_State* L) {
         apr_status_t status;
         session_rec *sess;
         request_rec *r = CHECK_REQUEST_OBJECT(1);
-        status = apr_pool_userdata_get(&sess,"ml_session",r->pool);
+        status = apr_pool_userdata_get((void**)&sess,"ml_session",r->pool);
         if (status==APR_SUCCESS) {
             const char* key = luaL_checkstring(L, 2);
             const char* val = luaL_checkstring(L, 3);
@@ -206,7 +206,7 @@ static int ml_smp_get(lua_State*L) {
     ml_slotmem* sm = CHECK_SLOTMEM_OBJECT(1);
     int id = luaL_checkint(L,2);
     char* buf = malloc(sm->_size);
-    apr_status_t status = sm->_provider->get(sm->_instance,id,buf,sm->_size);
+    apr_status_t status = sm->_provider->get(sm->_instance,id,(unsigned char*)buf,sm->_size);
     if (status==APR_SUCCESS) {
         int size = *(int*)buf;
         if(size>0)
@@ -233,7 +233,7 @@ static int ml_smp_put(lua_State*L) {
         char* dat = malloc(sm->_size+sizeof(int));
         *(int*)dat = len;
         strncpy(dat+sizeof(int),luaL_checkstring(L,3), len);
-        status = sm->_provider->put(sm->_instance,id,dat,len+sizeof(int));
+        status = sm->_provider->put(sm->_instance,id,(unsigned char*)dat,len+sizeof(int));
     }
     return ml_push_status(L,status); 
 }
@@ -442,8 +442,8 @@ int ml_socache_lookup(lua_State*L) {
         luaL_getmetatable(L,"mod_luaex.socache");
         lua_setmetatable(L,-2);
     }else{
-        char err[MAX_PATH];
-        apr_strerror(status, err, MAX_PATH);
+        char err[APR_PATH_MAX];
+        apr_strerror(status, err, APR_PATH_MAX);
         luaL_error(L, err);
     }
 
@@ -479,9 +479,9 @@ int ml_ssl_is_https (lua_State *L) {
 /* DBD extend API                                                       */
 /************************************************************************/
 
-ap_dbd_t* srv_dbd_open(server_rec* s);
-void srv_dbd_close(server_rec*s,ap_dbd_t*dbd);
-void srv_dbd_prepare(server_rec*s, const char*query, const char*lable);
+static ap_dbd_t* srv_dbd_open(server_rec* s);
+static void srv_dbd_close(server_rec*s,ap_dbd_t*dbd);
+static void srv_dbd_prepare(server_rec*s, const char*query, const char*lable);
 
 ap_dbd_t* dbd_acquire(request_rec* r);
 ap_dbd_t* dbd_cacquire(conn_rec* c);

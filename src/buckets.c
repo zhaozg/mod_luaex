@@ -212,7 +212,7 @@ APU_DECLARE(apr_status_t) apr_brigade_writev(apr_bucket_brigade *b,
 											 void *ctx,
 											 const struct iovec *vec,
 											 apr_size_t nvec);
-*
+*/
 /**
 * This function writes a string into a bucket brigade.
 * @param bb The bucket brigade to add to

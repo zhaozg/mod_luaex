@@ -105,7 +105,7 @@ static request_rec *ml_create_request(conn_rec *conn)
 
 static apr_bucket_brigade* get_bb(request_rec* r){
     apr_bucket_brigade *bb=NULL;
-    int s = apr_pool_userdata_get(&bb,"bb",r->pool);
+    int s = apr_pool_userdata_get((void**)&bb,"bb",r->pool);
     if(s==0){
         if(bb==NULL){
             bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
@@ -164,7 +164,7 @@ int lua_ap_send(lua_State *L){
     int s = apr_brigade_write(bb,NULL,NULL,dat,len);
     if(s==0){
         apr_bucket* b = NULL;
-        s = apr_pool_userdata_get(&b, "bucket_flush", r->connection->pool);
+        s = apr_pool_userdata_get((void**)&b, "bucket_flush", r->connection->pool);
         if(s==0)
         {
             if(b==NULL){
@@ -216,7 +216,6 @@ int ml_process_connection(conn_rec *c)
     } else {
         module* lua_module = ml_find_module(s,"lua_module");
 
-        conn_state_t *cs = c->cs;
         apr_socket_t *csd = ap_get_conn_socket(c);
         ap_lua_dir_cfg *dcfg = (ap_lua_dir_cfg *)ap_get_module_config(s->lookup_defaults,
             lua_module);
