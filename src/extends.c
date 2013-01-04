@@ -132,7 +132,7 @@ int ml_session_set(lua_State* L) {
         status = apr_pool_userdata_get((void**)&sess,"ml_session",r->pool);
         if (status==APR_SUCCESS) {
             const char* key = luaL_checkstring(L, 2);
-            const char* val = luaL_checkstring(L, 3);
+            const char* val = luaL_optstring(L, 3, NULL);
             ap_session_set(r, sess, key, val);
             lua_pushstring(L, val);
             return 1;

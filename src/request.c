@@ -221,39 +221,6 @@ static int lua_ap_expr_extract(lua_State *L)
 }
 
 
-static int lua_ap_getenv(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char *env = luaL_checkstring(L, 2);
-	const apr_array_header_t    *fields = apr_table_elts(r->subprocess_env);
-	int                         i;
-	apr_table_entry_t   *e = 0;
-	char *value = 0;
-	
-	e = (apr_table_entry_t *) fields->elts;
-	for (i = 0; i < fields->nelts; i++) {
-		if (!strcmp(env, e[i].key)) {
-			lua_pushstring(L, e[i].val);
-			return 1;
-		}
-	}
-	apr_env_get(&value, env, r->pool);
-	if (value) lua_pushstring(L, value);
-	return 1;
-}
-
-static int lua_ap_setenv(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char *key = luaL_checkstring(L, 2);
-	const char *val = luaL_checkstring(L, 3);
-	apr_table_add(r->subprocess_env, key, val);
-	apr_env_set(key, val, r->pool);
-	return 0;
-}
-
-
-
 static int lua_ap_options(lua_State *L) 
 {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -1056,8 +1023,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	apr_hash_set(dispatch, "escapehtml", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_escapehtml, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "expr", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_expr, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "regex", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_expr_extract, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "setenv", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_setenv, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "getenv", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_getenv, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "options", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_options, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "allowoverrides", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_allowoverrides, APL_REQ_FUNTYPE_LUACFUN, p));
 

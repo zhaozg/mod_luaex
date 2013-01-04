@@ -14,8 +14,58 @@ mod_luaex is a module for apache2, which extend mod_lua(http://httpd.apache.org/
 
 ## How to get and install the binding
 
+### patch mod_lua with patch.txt
+
+  Index: lua_vmprep.c
+
+  ===================================================================
+
+  --- lua_vmprep.c  (revision 1428708)
+
+  +++ lua_vmprep.c  (working copy)
+
+  @@ -320,7 +320,13 @@
+
+                : lua_tostring(L, 0));
+		     return APR_EBADF;
+		 }
+	-        lua_pcall(L, 0, LUA_MULTRET, 0);
+	+        rc = lua_pcall(L, 0, LUA_MULTRET, 0);
+	+		if(rc!=0){
+	+			printf(
+	+				"Error compilre %s: %s", spec->file,
+	+				rc == LUA_ERRMEM ? "memory allocation error"
+	+				: lua_tostring(L, -1));
+	+		}
+	     }
+	
+	 #ifdef AP_ENABLE_LUAJIT
+	Index: mod_lua.c
+
+	===================================================================
+
+	--- mod_lua.c	(revision 1428708)
+
+	+++ mod_lua.c	(working copy)
+
+	@@ -82,11 +82,11 @@
+
+	     ap_lua_load_apache2_lmodule(L);
+	     ap_lua_load_request_lmodule(L, p);
+	     ap_lua_load_config_lmodule(L);
+	+	ap_lua_run_lua_open(L, p);
+	 }
+	
+	 static int lua_open_hook(lua_State *L, apr_pool_t *p)
+	 {
+	-    lua_open_callback(L, p, NULL);
+	     return OK;
+	 }
+	
+
+
 ### Build on Windows with MSVC IDE.
-   
+
    Open build\mod_luaex.vcproj with MSVC 2008 or 2010.
 
 ### Build on UNIX using makefile
@@ -55,7 +105,7 @@ mod_luaex is a module for apache2, which extend mod_lua(http://httpd.apache.org/
 
 ### cookie object
 
-#### r:cookie()	  -- it will return an apr_table with cookie key and value 
+#### r:cookie()	  -- it will return an apr_table with cookie key and value
 #### r:cookie(boolean)
 	if arg is false, it will return an cookies key and value as apr_table object
 	if arg is true, it will return an table,name and cookie object keypaire
@@ -86,19 +136,20 @@ mod_luaex is a module for apache2, which extend mod_lua(http://httpd.apache.org/
 
 ### upload
 
-#### r:upload([apr_table])  
+#### r:upload([apr_table])
 	it will return an apr_table with param which has upload part
 	if argument apr_table not given, it will be get by apreq_body()
 #### r:upload([apr_table],...)
 	it will return multi param object which contains upload part
 	arg must be string as name
 
+### dbd
 
 ## Status
 
 ## Contact
 
-If you have questions, bug reports, suggestions, etc. the author can be contacted at <zhaozg@gmail.com>. 
+If you have questions, bug reports, suggestions, etc. the author can be contacted at <zhaozg@gmail.com>.
 
 ## License
 
