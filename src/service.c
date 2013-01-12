@@ -51,7 +51,7 @@ const char *ml_set_server_handle(cmd_parms *cmd, void *_cfg,
 }
 
 
-static request_rec *ml_create_request(conn_rec *conn)
+static request_rec *ml_create_request(conn_rec *conn,ml_server_conf *conf)
 {
     request_rec *r;
     apr_pool_t *p;
@@ -85,6 +85,7 @@ static request_rec *ml_create_request(conn_rec *conn)
     ap_run_create_request(r);
     r->per_dir_config  = r->server->lookup_defaults;
 
+	r->assbackwards    = 1;
     r->sent_bodyct     = 0;                      /* bytect isn't for body */
 
     r->read_length     = 0;
@@ -100,6 +101,10 @@ static request_rec *ml_create_request(conn_rec *conn)
 
     r->useragent_addr = conn->client_addr;
     r->useragent_ip = conn->client_ip;
+
+	r->protocol = apr_pstrdup(r->pool,conf->service);
+	r->uri      = apr_pstrdup(r->pool,conf->service);
+
     return r;
 }
 
@@ -117,68 +122,83 @@ static apr_bucket_brigade* get_bb(request_rec* r){
 
 int lua_ap_recv(lua_State *L){
     request_rec *r = CHECK_REQUEST_OBJECT(1);
-    apr_off_t bytes = luaL_optint(L, 2, 2048);
-    apr_bucket_brigade *bb=get_bb(r);
-    int s = ap_get_brigade(r->input_filters, bb, AP_MODE_READBYTES,APR_BLOCK_READ,bytes);
+	int type = lua_type(L, 2);
+	apr_off_t bytes = LUAL_BUFFERSIZE;
+	int s = 0;
+	int eof = 0;
 
-    if(s==0){
-        apr_bucket *e;
-        int n = 0;
-        int eof = 0;
-        for (e = APR_BRIGADE_FIRST(bb); e != APR_BRIGADE_SENTINEL(bb);
-            e = APR_BUCKET_NEXT(e))
-        {
-            const char *buf;
-            apr_size_t blen;
+	if(type==LUA_TNUMBER || type==LUA_TNIL || type==LUA_TNONE){
+		apr_bucket_brigade *bb=get_bb(r);
+		bytes = luaL_optint(L, 2, 4*bytes);
+		s = ap_get_brigade(r->input_filters, bb, AP_MODE_READBYTES,APR_BLOCK_READ,bytes);
 
-            if (APR_BUCKET_IS_EOS(e))
-                 eof = 1;
+		if(s==0){
+			apr_bucket *e;
+			int n = 0;
 
-            s = apr_bucket_read(e, &buf, &blen, APR_BLOCK_READ);
-            if (s != APR_SUCCESS)
-                break;
+			for (e = APR_BRIGADE_FIRST(bb); s==0 && e != APR_BRIGADE_SENTINEL(bb); e = APR_BUCKET_NEXT(e))
+			{
+				int blen;
+				const char* buf;
 
-            if (blen == 0)
-                continue;
+				if (APR_BUCKET_IS_EOS(e))
+					eof = 1;
+				else{
+					s = apr_bucket_read(e, &buf, &blen, APR_BLOCK_READ);
+					if(s==0){
+						lua_pushlstring(L, buf, blen);
+						n++;
+					}
+				}
+			}
+			lua_concat(L,n);
+		}else
+			lua_pushnil(L);
+		apr_brigade_cleanup(bb);
+	}else if(type==LUA_TSTRING){
+		
+		const char* want = lua_tostring(L,2);
+		if(strcasecmp("want","*l"))
+		{
+			apr_bucket_brigade *bb=get_bb(r);
+			luaL_Buffer buf;
+			apr_size_t n;
 
-            lua_pushlstring(L, buf, blen);
-            n++;
-        }
-        lua_concat(L,n);
-        lua_pushboolean(L,eof);
-    }
+			luaL_buffinit(L,&buf);
+			s = ap_rgetline(&buf.p,LUAL_BUFFERSIZE,&n,r,0,bb);
+			if(s==0){
+				lua_pushlstring(L,buf.buffer,n);
+			}else
+				lua_pushnil(L);
+			apr_brigade_cleanup(bb);
+		}else{
+			luaL_error(L,"#2 only support number or '*'");
+		}
+	}
+
     if(s)
     {
         lua_pushnil(L);
         lua_pushinteger(L,s);
-    }
-    apr_brigade_cleanup(bb);
-
+    }else{
+		lua_pushboolean(L,eof);
+	}
     return 2;
+
 }
+
 int lua_ap_send(lua_State *L){
     request_rec *r = CHECK_REQUEST_OBJECT(1);
     size_t len;
     const char* dat = luaL_checklstring(L,2,&len);
-    apr_bucket_brigade *bb=get_bb(r);
-    int s = apr_brigade_write(bb,NULL,NULL,dat,len);
-    if(s==0){
-        apr_bucket* b = NULL;
-        s = apr_pool_userdata_get((void**)&b, "bucket_flush", r->connection->pool);
-        if(s==0)
-        {
-            if(b==NULL){
-                b = apr_bucket_flush_create(r->connection->bucket_alloc);
-                apr_pool_userdata_set(b, "bucket_flush",NULL,r->connection->pool);
-            }
-            if(b)
-                APR_BRIGADE_INSERT_TAIL(bb, b);
-            s  = ap_pass_brigade(r->connection->output_filters, bb);
-        }
-    }
+	int flush = lua_isnone(L,3)?1:lua_toboolean(L, 3);
+	int s = ap_rwrite(dat,len,r);
+	if(s==len){
+		s = flush?ap_rflush(r):0;
+	}
+
     lua_pushboolean(L,s==0);
     lua_pushinteger(L,s);
-    apr_brigade_cleanup(bb);
     return 2;
 }
 static void ml_ext_filter_module(lua_State *L, apr_pool_t *p) {
@@ -222,7 +242,7 @@ int ml_process_connection(conn_rec *c)
 
         int result = HTTP_BAD_REQUEST;
         lua_State *L = NULL;
-        request_rec *r = ml_create_request(c);
+        request_rec *r = ml_create_request(c,conf);
 
         apr_os_sock_t fd;
         int sucessful;
@@ -231,14 +251,20 @@ int ml_process_connection(conn_rec *c)
             return HTTP_INTERNAL_SERVER_ERROR;
 
         ap_update_child_status_from_conn(c->sbh, SERVER_BUSY_KEEPALIVE, c);
-        ap_update_child_status(c->sbh, SERVER_BUSY_KEEPALIVE, NULL);
+        ap_update_child_status(c->sbh, SERVER_BUSY_READ, NULL);
         apr_socket_timeout_set(csd, c->base_server->keep_alive_timeout);
 
         conf->spec.pool = c->pool;
         conf->spec.package_cpaths = dcfg->package_cpaths;
         conf->spec.package_paths = dcfg->package_paths;
         conf->spec.cb = &lua_open_callback;
-        L = ap_lua_get_lua_state(c->pool,&conf->spec);
+#if AP_SERVER_MINORVERSION_NUMBER==5
+        L = ap_lua_get_lua_state(c->pool,&conf->spec,r);
+#elif  AP_SERVER_MINORVERSION_NUMBER==4
+		L = ap_lua_get_lua_state(c->pool,&conf->spec);
+#else
+#error "Only support 2.4 and 2.5
+#endif
         if (!L){
             return HTTP_INTERNAL_SERVER_ERROR;
         }

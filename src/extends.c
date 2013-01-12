@@ -451,31 +451,6 @@ int ml_socache_lookup(lua_State*L) {
 }
 
 /************************************************************************/
-/* SSL extend API                                                       */
-/************************************************************************/
-int ml_ssl_var_lookup(lua_State* L) {
-    if (ssl_var_lookup) {
-        request_rec *r = CHECK_REQUEST_OBJECT(1);
-        char *var_name = (char*)luaL_checkstring (L, 2);
-        const char *val = ssl_var_lookup(r->pool, r->server, r->connection, r, var_name);
-        if (val)
-            lua_pushstring(L,val);
-        else
-            lua_pushnil(L);
-
-        return 1;
-    }
-    return 0;
-}
-
-int ml_ssl_is_https (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-    lua_pushboolean (L,ssl_is_https && ssl_is_https(r->connection));
-    return 1;
-}
-
-/************************************************************************/
 /* DBD extend API                                                       */
 /************************************************************************/
 

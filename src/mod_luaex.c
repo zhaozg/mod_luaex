@@ -295,7 +295,7 @@ int call_lua_output_handle(lua_State *L,
 				apr_brigade_cleanup(bb);
 
 				status = ml_call(L, f->frec->name, "rS>S", r, data, len, (char **)&data, &len);
-				b = apr_bucket_transient_create(data, len,apr_bucket_alloc_create(r->pool));
+				b = apr_bucket_transient_create(data, len,apr_bucket_alloc_create(f->c->pool));
 				APR_BRIGADE_INSERT_TAIL(bb, b);
 				APR_BRIGADE_INSERT_TAIL(bb, eos);
             }            
@@ -310,33 +310,173 @@ int call_lua_output_handle(lua_State *L,
 /*
 *  the table of configuration directives we provide
 */
+typedef struct
+{
+	apr_bucket_brigade *tmpBucket;
+	lua_State *L;
+} lua_filter_ctx;
+
+AP_LUA_DECLARE(int) ap_lua_init(lua_State *L, apr_pool_t * p);
+AP_LUA_DECLARE(void) ap_lua_load_config_lmodule(lua_State *L);
+
+static void lua_open_callback(lua_State *L, apr_pool_t *p, void *ctx)
+{
+	ap_lua_init(L, p);
+	ap_lua_load_apache2_lmodule(L);
+	ap_lua_load_request_lmodule(L, p);
+	ap_lua_load_config_lmodule(L);
+}
 
 apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
 {
 	request_rec *r = f->r;
 	conn_rec *c = f->c;
-	apr_bucket_brigade *bbb = f->ctx;
-	apr_bucket *b, *eos_bucket=NULL ;
+	lua_filter_ctx *ctx = NULL; 
 	lua_State   *L = NULL;
 	apr_status_t rv;
-
-
 	struct dir_config *d = ap_get_module_config(r->per_dir_config, &luaex_module);
+	const char* script = apr_table_get(d->filter,f->frec->name);
+	char *data;
+	apr_size_t len;
 
-	if(apr_table_get(d->filter,f->frec->name)==NULL || apr_pool_userdata_get((void**)&L,ML_OUTPUT_FILTER_KEY4LUA, r->pool) || L==NULL)
+	int i=1;
+
+	if(!f->ctx)
 	{
-		ap_remove_output_filter(f);
-		return ap_pass_brigade(f->next, bb);
+		if(script==NULL)
+		{
+			ap_remove_output_filter(f);
+			return ap_pass_brigade(f->next, bb);
+		}
+
+		if(apr_table_get(d->filter,f->frec->name)==NULL || apr_pool_userdata_get((void**)&L,ML_OUTPUT_FILTER_KEY4LUA, r->pool) || L==NULL)
+		{
+			ap_remove_output_filter(f);
+			return ap_pass_brigade(f->next, bb);
+		}
+
+		f->ctx = apr_palloc(r->pool, sizeof(lua_filter_ctx));
+		ctx = f->ctx;
+		ctx->L = lua_newthread(L);
+		ctx->tmpBucket = apr_brigade_create(r->pool, c->bucket_alloc);
+		L = ctx->L;
+		r->chunked = 1;
+		/*
+		if (apr_table_get(r->headers_out, "Content-Length"))
+		{
+			apr_table_unset(r->headers_out, "Content-Length");
+			if(!ap_find_last_token(r->pool,
+				apr_table_get(r->headers_out,
+				"Transfer-Encoding"),
+				"chunked"))
+				apr_table_mergen(r->headers_out, "Transfer-Encoding", "chunked");
+
+			r->proto_num = HTTP_VERSION(1,1);
+			r->chunked = 1;
+        }*/
+
+		rv = ml_load_chunk(L,script,f->frec->name);
+		lua_settop(L,0);
+		if (rv==0)
+		{
+			lua_getglobal(L, f->frec->name);
+			if(!lua_isfunction(L,-1))
+			{
+				ap_log_rerror(APLOG_MARK, APLOG_CRIT, 0, r, APLOGNO(02329)
+					"lua: Unable to find function %s in %s",
+					f->frec->name,
+					script);
+				return APR_EGENERAL;
+			}
+
+			ap_lua_run_lua_request(L, r);
+			printf("A%d TOP=%d\n",i,lua_gettop(L)); i++;
+
+			rv = lua_resume(L, 1);
+			if(rv==0)
+			{
+				ap_remove_output_filter(f);
+				return ap_pass_brigade(f->next, bb);
+			}
+
+			if (rv != LUA_YIELD) {
+				if(rv==LUA_ERRRUN)
+					printf(lua_tostring(L,-1));
+				return HTTP_INTERNAL_SERVER_ERROR;
+			}
+		} else{
+			ap_log_rerror(APLOG_MARK, APLOG_CRIT, 0, r, APLOGNO(02329)
+				"lua: Unable to load %s",
+				script);
+			printf("%s\n",lua_tostring(L,-1));
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+	}
+	ctx = f->ctx;
+	L = ctx->L;
+
+	rv = apr_brigade_pflatten(bb,&data,&len,r->pool);
+	if(rv==0){
+		/* Push the bucket onto the Lua stack as a global var */
+		lua_getglobal(L, f->frec->name);
+		lua_pushlstring(L, data, len);
+		/* If Lua yielded, it means we have something to pass on */
+		printf("A%d TOP=%d\n",i,lua_gettop(L)); i++;
+		rv = lua_resume(L, 1);
+
+		if (rv == LUA_YIELD) {
+			size_t olen;
+			const char* output = lua_tolstring(L, 1, &olen);
+			lua_pop(L,1);
+
+			if(olen>0){
+				apr_bucket *pbktOut = apr_bucket_heap_create(output, olen, NULL, c->bucket_alloc);
+				APR_BRIGADE_INSERT_TAIL(ctx->tmpBucket, pbktOut);
+				rv = ap_pass_brigade(f->next, ctx->tmpBucket);
+				apr_brigade_cleanup(ctx->tmpBucket);
+				if (rv != APR_SUCCESS) {
+					return rv;
+				}
+			}
+		}
+		else {
+			ap_remove_output_filter(f);
+			apr_brigade_cleanup(bb);
+			apr_brigade_cleanup(ctx->tmpBucket);
+			if(rv==LUA_ERRRUN)
+				printf("%s\n%s",r->uri,lua_tostring(L,-1));
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+
+
+        /* If we've safely reached the end, do a final call to Lua to allow for any 
+        finishing moves by the script, such as appending a tail. */
+        if (APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(bb))) {
+			lua_getglobal(L, f->frec->name);
+			lua_pushnil(L);
+
+			printf("A%d TOP=%d LAST\n",i,lua_gettop(L)); i++;
+			fflush(stdout);
+
+			if (lua_resume(L, 1) == LUA_YIELD) {
+				apr_bucket *pbktOut;
+				size_t olen;
+				const char* output = lua_tolstring(L, 1, &olen);
+				if(olen>0){
+					pbktOut = apr_bucket_heap_create(output, olen, NULL, c->bucket_alloc);
+					APR_BRIGADE_INSERT_TAIL(ctx->tmpBucket, pbktOut);
+				}
+			}
+			APR_BRIGADE_INSERT_TAIL(ctx->tmpBucket, apr_bucket_eos_create(c->bucket_alloc));
+			apr_brigade_cleanup(bb);
+			rv = ap_pass_brigade(f->next, ctx->tmpBucket);
+			apr_brigade_cleanup(ctx->tmpBucket);
+			return rv;
+        }
 	}
 
-	if(!bbb)
-	{
-		f->ctx = apr_brigade_create(c->pool, c->bucket_alloc);
-		bbb = f->ctx;
-	}
 
-	
-    /* Interate through the available data. Stop if there is an EOS */
+/*
 #if AP_SERVER_MAJORVERSION_NUMBER==2 && AP_SERVER_MINORVERSION_NUMBER==0
     APR_BRIGADE_FOREACH(b, bb) {
 #elif AP_SERVER_MAJORVERSION_NUMBER==2
@@ -345,44 +485,10 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
 		b = APR_BUCKET_NEXT(b))
 	{
 #else
-#error "Only Support Apache 2.0x or 2.2x
+#error "Only Support Apache 2.0x or 2.xx
 #endif
-		if (APR_BUCKET_IS_EOS(b)) {
-			APR_BUCKET_REMOVE(b);
-			eos_bucket = b;
-			break;
-		}
 	}
-		
-	ap_save_brigade(f, &bbb, &bb, r->pool);
-	if (!eos_bucket) {
-		return APR_SUCCESS;
-	}
-
-	if((rv=call_lua_output_handle(L,apr_table_get(d->filter,f->frec->name),f,bbb,eos_bucket))==0)
-	{
-		rv = ap_pass_brigade(f->next, bbb);
-		if (rv == APR_SUCCESS
-			|| r->status != HTTP_OK
-			|| c->aborted) 
-		{
-			return r->status;
-		}else
-		{
-			/* no way to know what type of error occurred */
-			ap_log_rerror(APLOG_MARK, APLOG_DEBUG, rv, r,
-				"lua_output_filter: ap_pass_brigade returned %i",
-				rv);
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-	}else
-	{
-        rv = ap_pass_brigade(f->next, bbb);
-		ap_log_rerror(APLOG_MARK, APLOG_DEBUG, rv, r,
-			"lua_output_filter: call_lua_output_handle returned %i",
-			rv);
-		return HTTP_INTERNAL_SERVER_ERROR;
-	}
+*/
 
     return APR_SUCCESS;
 }

@@ -180,45 +180,59 @@ static int lua_ap_expr(lua_State *L)
 	return 1;
 }
 
-
-static int lua_ap_expr_extract(lua_State *L) 
+/*
+ * lua_ap_regex; r:regex(string, pattern) - Evaluates a regex and returns
+ * captures if matched
+ */
+static int lua_ap_regex(lua_State *L)
 {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char *pattern = luaL_checkstring(L, 2);
-	const char *source = luaL_checkstring(L, 3);
-	int x = 0;
-	const char *err=NULL;
-	ap_regex_t regex;
-	ap_regmatch_t matches[10];
+    request_rec    *r;
+    int i, rv;
+    const char     *pattern, *source;
+    char           *err;
+    ap_regex_t regex;
+    ap_regmatch_t matches[AP_MAX_REG_MATCH];
 
-	if (ap_regcomp(&regex, pattern,0)) {
-		return 0;
-	}
+    luaL_checktype(L, 1, LUA_TUSERDATA);
+    luaL_checktype(L, 2, LUA_TSTRING);
+    luaL_checktype(L, 3, LUA_TSTRING);
+    r = CHECK_REQUEST_OBJECT(1);
+    pattern = lua_tostring(L, 2);
+    source = lua_tostring(L, 3);
 
+    rv = ap_regcomp(&regex, pattern, 0);
+    if (rv) {
+        lua_pushboolean(L, 0);
+        err = apr_palloc(r->pool, 256);
+        ap_regerror(rv, &regex, err, 256);
+        lua_pushstring(L, err);
+        return 2;
+    }
 
-	if (!err) {
-		int i;
-		x = ap_regexec(&regex, source, 10, matches, 0);
-		if (x < 0) {
-			lua_pushstring(L, err);
-			return 1;
-		}
+    rv = ap_regexec(&regex, source, AP_MAX_REG_MATCH, matches, 0);
+    if (rv < 0) {
+        lua_pushboolean(L, 0);
+        err = apr_palloc(r->pool, 256);
+        ap_regerror(rv, &regex, err, 256);
+        lua_pushstring(L, err);
+        return 2;
+    }
 		lua_newtable(L);
-		for (i=0;i<10;i++) {
+		for (i = 0; i < regex.re_nsub; i++) {
 			lua_pushinteger(L, i);
-			if (matches[i].rm_so >= 0 && matches[i].rm_eo >= 0) {
-				lua_pushstring(L,apr_pstrndup(r->pool, source+matches[i].rm_so, matches[i].rm_eo - matches[i].rm_so));
-			}
-			else {
+			if (matches[i].rm_so >= 0 && matches[i].rm_eo >= 0)
+				lua_pushstring(L,
+							   apr_pstrndup(r->pool, source + matches[i].rm_so,
+											matches[i].rm_eo - matches[i].rm_so));
+			else
 				lua_pushnil(L);
-			}
 			lua_settable(L, -3);
 
 		}
-		return 1;
-	}
-	return 0;
+
+    return 1;
 }
+
 
 
 static int lua_ap_options(lua_State *L) 
@@ -1022,7 +1036,7 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	apr_hash_set(dispatch, "unescape", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_unescape, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "escapehtml", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_escapehtml, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "expr", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_expr, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "regex", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_expr_extract, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "regex", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_regex, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "options", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_options, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "allowoverrides", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_allowoverrides, APL_REQ_FUNTYPE_LUACFUN, p));
 
@@ -1083,8 +1097,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	apr_hash_set(dispatch, "slotmem_attach", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_attach, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "slotmem_lookup", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "ssl_var_lookup", APR_HASH_KEY_STRING, ml_makefun(&ml_ssl_var_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "ssl_is_https", APR_HASH_KEY_STRING, ml_makefun(&ml_ssl_is_https, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "dbd_acquire", APR_HASH_KEY_STRING, ml_makefun(&ml_dbd_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "dbd_prepare", APR_HASH_KEY_STRING, ml_makefun(&ml_dbdriver_prepare, APL_REQ_FUNTYPE_LUACFUN, p));
 

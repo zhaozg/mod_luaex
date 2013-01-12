@@ -138,6 +138,7 @@ static const command_rec apreq_cmds[] =
                   "Maximum amount of data that will be fed into a parser."),
     AP_INIT_TAKE1("Luaex_BrigadeLimit", apreq_set_brigade_limit, NULL, OR_ALL,
                   "Maximum in-memory bytes a brigade may use."),
+
     AP_INIT_TAKE2("Luaex_OutputFilter", luaex_cmd_OuputFilter, NULL, OR_ALL,
                   "Luaex VM Output Filter Script "
                   "Lua_Output_Filter FilterName LuaScript"
