@@ -262,11 +262,11 @@ static int ml_smp_tostring(lua_State*L) {
     return 1;
 }
 
-static  apr_status_t  ml_smp_docall(void* mem, void *data, void *p)
+static  apr_status_t  ml_smp_docall(void* mem, void *data, apr_pool_t *p)
 {
     char* buf = mem;
     ml_slotmem *sm = data;
-    lua_State *L = p;
+    lua_State *L = (lua_State *)p;
     int len = *(int*)mem;
     int n  = lua_gettop(L);
 
@@ -294,8 +294,6 @@ static int ml_smp_call(lua_State*L) {
         return 1;
     }else if(lua_isfunction(L,2)) {
         sm->_provider->doall(sm->_instance, ml_smp_docall, sm, (void*)L);
-
-
     }
     else{
         int id;
@@ -347,7 +345,7 @@ static int ml_sop_retrieve(lua_State*L) {
     const char* key = luaL_checklstring(L,2,&kl);
     apr_status_t rv;
     unsigned char* dat = malloc(dl);
-    rv = c->_provider->retrieve(c->_instance,c->_server,key,kl,dat,&dl,c->_pool);
+    rv = c->_provider->retrieve(c->_instance,c->_server,key,kl,dat,(unsigned int*)&dl,c->_pool);
     if (rv==APR_SUCCESS)
     {
         //c->_provider->store(c->_instance,c->_server,key,kl,c->_timeout+apr_time_now(),dat,dl,c->_pool);		
@@ -575,7 +573,7 @@ int ml_dbdriver_tostring(lua_State* L) {
 int ml_dbdriver_index(lua_State* L) {
     ml_dbd *d = CHECK_DBD_OBJECT(1);
     int len;
-    const char *lable = luaL_checklstring(L,2,&len);
+    const char *lable = luaL_checklstring(L,2,(size_t*)&len);
     const char *sql = apr_hash_get(d->dbd->prepared, lable, len);
     if(sql)
         lua_pushstring(L, sql);

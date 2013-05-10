@@ -557,7 +557,19 @@ static int param_index(lua_State*L)
 	{
 		if(strcmp(key,"charset")==0)
 		{
-			lua_pushinteger(L, apreq_param_charset_get(p));
+			apreq_charset_t set = apreq_param_charset_get(p);
+			lua_pushinteger(L, set);
+			if (set==APREQ_CHARSET_ASCII)
+				lua_pushstring(L, "ascii");
+			else if(set==APREQ_CHARSET_LATIN1)
+				lua_pushstring(L, "latin1");
+			else if(set==APREQ_CHARSET_CP1252)
+				lua_pushstring(L, "cp1252");
+			else if(set==APREQ_CHARSET_UTF8)
+				lua_pushstring(L, "utf8");
+			else
+				lua_pushstring(L, "unknown");
+			return 2;
 		}else if(strcmp(key,"encode")==0)
 		{
 		    //FIXME:
@@ -610,9 +622,9 @@ static int param_tostring(lua_State*L){
     return 1;
 }
 static luaL_reg param_mlibs[] = {
-	{"__tostring",		param_tostring},
+	{"__tostring",	param_tostring},
 	{"__index",		param_index},
-	{"__newindex",		param_index},
+	{"__newindex",	param_index},
 
 	{NULL, NULL}
 };

@@ -82,36 +82,52 @@ static int table_overlap(lua_State*L)
 
 static int table_next(lua_State*L)
 {
-    const apr_array_header_t* a = (const apr_array_header_t*)lua_topointer(L,lua_upvalueindex(1));
-    const apr_table_entry_t *elts = (const apr_table_entry_t *) a->elts;
-    int i = lua_tointeger(L,lua_upvalueindex(2));
-    if (i<a->nelts)
-    {
-        lua_pushstring(L,elts[i].key);
-        lua_pushstring(L,elts[i].val);
+	const apr_array_header_t* a = (const apr_array_header_t*)lua_topointer(L,lua_upvalueindex(1));
+	const apr_table_entry_t *elts = (const apr_table_entry_t *) a->elts;
+	int i = lua_tointeger(L,lua_upvalueindex(2));
+	if (i<a->nelts)
+	{
+		lua_pushstring(L,elts[i].key);
+		lua_pushstring(L,elts[i].val);
 
-        lua_pushinteger(L,i+1);
-        lua_replace(L,lua_upvalueindex(2));
-        return 2;
-    }
-    return 0;
+		lua_pushinteger(L,i+1);
+		lua_replace(L,lua_upvalueindex(2));
+		return 2;
+	}
+	return 0;
 }
 
 static int table_iter(lua_State*L)
 {
     const apr_table_t *t = CHECK_APRTABLE_OBJECT(1);
     const apr_array_header_t* arr = apr_table_elts(t);
-
+	lua_settop(L, 1);
     lua_pushlightuserdata(L,(void*)arr);
     lua_pushinteger(L,0);
     lua_pushcclosure(L,table_next,2);
     return 1;
 }
+
 static int table_tostring(lua_State*L)
 {
     const apr_table_t *t = CHECK_APRTABLE_OBJECT(1);
     lua_pushfstring(L,"apr_table(%p)",t);
     return 1;
+}
+
+static int table_call(lua_State*L)
+{
+	const apr_table_t *t = CHECK_APRTABLE_OBJECT(1);
+	const apr_array_header_t* arr = apr_table_elts(t);
+	const apr_table_entry_t *elts = (const apr_table_entry_t *) arr->elts;
+	int i;
+	lua_newtable(L);
+	for(i=0; i<arr->nelts; i++){
+		lua_pushstring(L,elts[i].key);
+		lua_pushstring(L,elts[i].val);
+		lua_rawset(L, -3);
+	}
+	return 1;
 }
 
 static luaL_reg table_mlibs[] = {
@@ -124,6 +140,7 @@ static luaL_reg table_mlibs[] = {
     {"__len",			table_len},
     {"__unm",			table_compress},
     {"__pairs",			table_iter},
+	{"__call",			table_call},
 
     {NULL,          NULL}
 };

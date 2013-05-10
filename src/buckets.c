@@ -79,13 +79,13 @@ static int brigade_length(lua_State*L)
 static int brigade_flatten(lua_State*L)
 {
 	apr_bucket_brigade *bb = (apr_bucket_brigade*)CHECK_BUCKETBRIGADE_OBJECT(1);
-	apr_off_t off = luaL_optinteger(L,2, 0);
-	apr_status_t rc = off==0 ? 0 : apr_brigade_length(bb, 1, &off);
+	apr_off_t off = 0;
+	apr_status_t rc = apr_brigade_length(bb, 1, &off);
 	apr_size_t len = (apr_size_t)off;
+	
 	if(rc==APR_SUCCESS)
 	{
 		char* buf = apr_bucket_alloc(len, bb->bucket_alloc);
-
 		rc = apr_brigade_flatten(bb, buf, &len);
 		if(rc==APR_SUCCESS)
 		{

@@ -43,43 +43,6 @@ static int lua_ap_escapehtml (lua_State *L) {
 	return 1;
 }
 
-
-
-static int lua_ap_sendfile(lua_State *L)
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char  *filename = luaL_checkstring(L, 2);
-
-	struct apr_finfo_t  fileinfo;
-	
-	if (apr_stat(&fileinfo,filename,APR_FINFO_SIZE,r->pool) == -1)
-		lua_pushboolean(L, 0);
-	else {
-		if (r) {
-
-			/*~~~~~~~~~~~~~~~~~~*/
-			apr_size_t      sent;
-			apr_status_t    rc;
-			apr_file_t      *file;
-			/*~~~~~~~~~~~~~~~~~~*/
-
-			rc = apr_file_open(&file, filename, APR_READ, APR_OS_DEFAULT,
-				r->pool);
-			if (rc == APR_SUCCESS) {
-				ap_send_fd(file, r, 0, (apr_size_t)fileinfo.size, &sent);
-				apr_file_close(file);
-				lua_pushinteger(L, sent);
-			}
-			else
-				lua_pushboolean(L, 0);
-		}
-		else
-			lua_pushboolean(L, 0);
-	}
-
-	return (1);
-}
-
 static int req_get_remote_logname (lua_State *L) {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
 
@@ -259,12 +222,6 @@ static int lua_ap_allowoverrides(lua_State *L)
 }
 
 //////////////////////////////////////////////////////////////////////////
-static int req_add_common_vars(lua_State* L) {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	ap_add_common_vars(r);
-	return 0;
-}
-
 
 static int req_allow_methods(lua_State *L) {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -283,22 +240,22 @@ static int req_allow_methods(lua_State *L) {
 	return 0;
 }
 
-
-static int req_construct_url(lua_State *L) {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char* uri = luaL_checkstring(L,2);
-
-	lua_pushstring(L,ap_construct_url(r->pool, uri,r));
-	return 1;
-}
-
 static int req_internal_redirect(lua_State* L) {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char *new_uri = luaL_checkstring(L, 2);
+	const char *new_uri = luaL_optstring(L, 2, r->uri);
 
 	ap_internal_redirect(new_uri, r);
 	return 0;
 }
+
+static int req_internal_redirect_handle(lua_State* L) {
+	request_rec *r = CHECK_REQUEST_OBJECT(1);
+	const char *new_uri = luaL_optstring(L, 2, r->uri);
+
+	ap_internal_redirect_handler(new_uri, r);
+	return 0;
+}
+
 
 static int req_redirect(lua_State* L){
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -328,6 +285,10 @@ static int req_set_etag(lua_State* L) {
 
 static int req_set_last_modified(lua_State* L) {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
+	lua_Integer mtime = luaL_optinteger(L, 2, 0);
+	if(mtime){
+		ap_update_mtime(r, apr_time_from_sec(mtime));
+	}
 	ap_set_last_modified(r);
 
 	return 0;
@@ -345,50 +306,75 @@ static int req_update_mtime(lua_State* L) {
 /************************************************************************/
 /* Apache Handle Process and Output                                     */
 /************************************************************************/
-
+static int req_meets(lua_State*L )
+{
+	request_rec *r = CHECK_REQUEST_OBJECT(1);
+	apr_time_t mtime = luaL_checkint(L, 2);
+	int len = luaL_checkint(L, 3);
+	int status;
+	if(mtime) 
+		ap_update_mtime(r, mtime*APR_USEC_PER_SEC);
+	ap_set_last_modified(r);
+	ap_set_etag(r);
+	ap_set_accept_ranges(r);
+	apr_table_setn(r->headers_out, "Content-Length", apr_itoa(r->pool,len));
+	status = ap_meets_conditions(r);
+	if(status==0){
+		lua_pushnil(L);
+	}else
+		lua_pushinteger(L, status);
+	
+	return 1;
+}
 static int req_sendfile(lua_State* L) {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
 	const char *fname = luaL_checkstring(L,2);
 	apr_size_t offset = luaL_optlong(L,3,0);
 	apr_size_t len = luaL_optlong(L,4,-1);
 
-	apr_file_t *fd;
-	apr_size_t nbytes;
 	apr_status_t status;
-	apr_finfo_t finfo;
 
-	status=apr_stat(&finfo, fname, APR_FINFO_SIZE, r->pool);
-	if (status != APR_SUCCESS) {
+	status=apr_stat(&r->finfo, fname, APR_FINFO_SIZE|APR_FINFO_MTIME|APR_FINFO_TYPE, r->pool);
+	if (status != APR_SUCCESS || r->finfo.filetype!=APR_REG) {
 		ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Could not stat file for reading %s", fname);
 		lua_pushnil(L);
 		lua_pushstring(L,"Could not stat file for reading");
 		return 2;
 	}
-
-	status=apr_file_open(&fd, fname, APR_READ, APR_OS_DEFAULT, r->pool);
-	if (status != APR_SUCCESS) {
-		ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Could not open file for reading %s", fname);
-		lua_pushnil(L);
-		lua_pushstring(L,"Could not open file for reading");
-		return 2;
-	}                         
-
 	if (len==-1) 
-		len=(apr_size_t)finfo.size;
+		len=(apr_size_t)r->finfo.size;
+	ap_update_mtime(r, r->finfo.mtime);
+	ap_set_last_modified(r);
+	ap_set_etag(r);
+	ap_set_accept_ranges(r);
+	ap_set_content_length(r,len);
 
-	status = ap_send_fd(fd, r, offset,  len, &nbytes);
-	apr_file_close(fd);
+	status = ap_meets_conditions(r);
+	if(status==OK){
+		apr_file_t *fd;
+		status=apr_file_open(&fd, fname, APR_READ, APR_OS_DEFAULT, r->pool);
+		if (status != APR_SUCCESS) {
+			ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Could not open file for reading %s", fname);
+			lua_pushnil(L);
+			lua_pushstring(L,"Could not open file for reading");
+			return 2;
+		}                         
+		r->status = HTTP_OK;
+		status = ap_send_fd(fd, r, offset,  len, &len);
+		apr_file_close(fd);
 
-	if (status != APR_SUCCESS) 
-	{
-		ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Write failed, client closed connection.");
-		lua_pushnil(L);
-		lua_pushstring(L,"Write failed, client closed connection.");
-		return 2;
-	}
-
-	lua_pushnumber(L, nbytes);
-	return 1;
+		if (status != APR_SUCCESS) 
+		{
+			ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Write failed, client closed connection.");
+			lua_pushnil(L);
+			lua_pushstring(L,"Write failed, client closed connection.");
+			return 2;
+		}
+	}else
+		r->status = status;
+	lua_pushinteger(L, r->status);
+	lua_pushinteger(L, len);
+	return 2;
 }
 
 static int pushresult (lua_State *L, int i, const char *filename) {
@@ -829,44 +815,6 @@ static int lua_ap_satisfies (lua_State *L) {
 }
 
 
-
-static int lua_ap_run_sub_req (lua_State *L) {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-	request_rec *new_r;
-	const char* uri = luaL_checkstring(L, 2);
-	new_r = ap_sub_req_lookup_uri(uri, r, NULL);
-	ap_parse_uri(new_r, uri);
-	new_r->header_only = 1;
-	new_r-> status = 0;
-	new_r->handler = "default-handler";
-	ap_run_type_checker(new_r);
-	ap_run_translate_name(new_r);
-	ap_run_map_to_storage(new_r);
-	ap_run_fixups(new_r);
-	//ap_run_handler(new_r);
-
-
-	lua_newtable(L);
-
-	lua_pushstring(L, "status");
-	lua_pushinteger(L, new_r->status);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "hostname");
-	lua_pushstring(L, new_r->hostname);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "uri");
-	lua_pushstring(L, new_r->uri);
-	lua_settable(L, -3);
-
-	return 1;
-}
-
-
-
-
 /** 
  * ap_auth_name (request_rec *r)
  * Return the current Authorization realm
@@ -885,7 +833,7 @@ static int lua_ap_auth_name (lua_State *L) {
 static int lua_ap_get_limit_req_body(lua_State *L) 
 {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	lua_pushinteger(L, ap_get_limit_req_body(r));
+	lua_pushinteger(L, (lua_Integer)ap_get_limit_req_body(r));
 	return 1;
 }
 
@@ -930,19 +878,19 @@ static int lua_ap_stat(lua_State *L)
 	lua_newtable(L);
 
 	lua_pushstring(L, "mtime");
-	lua_pushinteger(L, file_info.mtime);
+	lua_pushinteger(L, (lua_Integer)file_info.mtime);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "atime");
-	lua_pushinteger(L, file_info.atime);
+	lua_pushinteger(L, (lua_Integer)file_info.atime);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "ctime");
-	lua_pushinteger(L, file_info.ctime);
+	lua_pushinteger(L, (lua_Integer)file_info.ctime);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "size");
-	lua_pushinteger(L, file_info.size);
+	lua_pushinteger(L, (lua_Integer)file_info.size);
 	lua_settable(L, -3);
 
 	lua_pushstring(L, "filetype");
@@ -1013,6 +961,59 @@ static int req_connection(lua_State *L) {
     return 1;
 }
 
+static int req_mime_types(lua_State *L) {
+	request_rec *r = CHECK_REQUEST_OBJECT(1);
+	apr_pool_t *p = r->connection->base_server->process->pool;
+	const char* resource_name = luaL_checkstring(L, 2);
+	int set = lua_isnoneornil(L, 3) ? 0 : lua_toboolean(L, 3);
+	apr_hash_t *mimes = NULL;
+	apr_status_t rc = apr_pool_userdata_get((void**)&mimes, "mod_luaex", p);
+	const char* fn, *ext, *fntmp;
+	const char* type = NULL;
+
+	if (rc==APR_SUCCESS && mimes){
+		if ((fn = ap_strrchr_c(resource_name, '/')) == NULL) {
+			fn = resource_name;
+		}
+		else {
+			++fn;
+		}
+		/* Always drop the path leading up to the file name.
+		 */
+
+
+		/* The exception list keeps track of those filename components that
+		 * are not associated with extensions indicating metadata.
+		 * The base name is always the first exception (i.e., "txt.html" has
+		 * a basename of "txt" even though it might look like an extension).
+		 * Leading dots are considered to be part of the base name (a file named
+		 * ".png" is likely not a png file but just a hidden file called png).
+		 */
+		fntmp = fn;
+		while (*fntmp == '.')
+			fntmp++;
+		fntmp = ap_strchr_c(fntmp, '.');
+		if (fntmp) {
+			fn = fntmp + 1;
+			ext = apr_pstrdup(r->pool, fn);
+		}
+		else {
+			ext = apr_pstrdup(r->pool, fn);
+			fn += strlen(fn);
+		}
+
+		if (set && (type = apr_hash_get(mimes, ext, APR_HASH_KEY_STRING)) != NULL) {
+				ap_set_content_type(r, (char*) type);
+		}
+	}
+	if (type)
+		lua_pushstring(L, type);
+	else
+		lua_pushnil(L);
+
+	return 1;
+}
+
 req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool)
 {
 	req_fun_t *rft = apr_palloc(pool, sizeof(req_fun_t));
@@ -1062,20 +1063,33 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	apr_hash_set(dispatch, "request_has_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_request_has_body, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "get_limit_req_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_get_limit_req_body, APL_REQ_FUNTYPE_LUACFUN, p));
 
+	apr_hash_set(dispatch, "get_basic_auth_pw", APR_HASH_KEY_STRING, ml_makefun(&req_get_basic_auth_pw, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "meets_conditions", APR_HASH_KEY_STRING, ml_makefun(&req_meets_conditions, APL_REQ_FUNTYPE_LUACFUN, p));
+	
 	apr_hash_set(dispatch, "print", APR_HASH_KEY_STRING, ml_makefun(&req_print, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "add_cgi_vars", APR_HASH_KEY_STRING, ml_makefun(&req_add_cgi_vars, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "internal_redirect", APR_HASH_KEY_STRING, ml_makefun(&req_internal_redirect, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "internal_redirect_handle", APR_HASH_KEY_STRING, ml_makefun(&req_internal_redirect_handle, APL_REQ_FUNTYPE_LUACFUN, p));
+	
 	apr_hash_set(dispatch, "redirect", APR_HASH_KEY_STRING, ml_makefun(&req_redirect, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "sendfile", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_sendfile, APL_REQ_FUNTYPE_LUACFUN, p));
-
-
+	apr_hash_set(dispatch, "sendfile", APR_HASH_KEY_STRING, ml_makefun(&req_sendfile, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "meets",    APR_HASH_KEY_STRING, ml_makefun(&req_meets,    APL_REQ_FUNTYPE_LUACFUN, p));
+	
 	apr_hash_set(dispatch, "get_remote_host", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_host, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "get_remote_logname", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_logname, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "get_server_port", APR_HASH_KEY_STRING, ml_makefun(&req_get_server_port, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "allow_methods", APR_HASH_KEY_STRING, ml_makefun(&req_allow_methods, APL_REQ_FUNTYPE_LUACFUN, p));
+	
 
 	apr_hash_set(dispatch, "server", APR_HASH_KEY_STRING, ml_makefun(&req_server, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "connection", APR_HASH_KEY_STRING, ml_makefun(&req_connection, APL_REQ_FUNTYPE_LUACFUN, p));
-	
 
+	apr_hash_set(dispatch, "set_content_length", APR_HASH_KEY_STRING, ml_makefun(&req_set_content_length, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "set_etag", APR_HASH_KEY_STRING, ml_makefun(&req_set_etag, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "set_last_modified", APR_HASH_KEY_STRING, ml_makefun(&req_set_last_modified, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "update_mtime", APR_HASH_KEY_STRING, ml_makefun(&req_update_mtime, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "mime_types", APR_HASH_KEY_STRING, ml_makefun(&req_mime_types, APL_REQ_FUNTYPE_LUACFUN, p));
+	
 	apr_hash_set(dispatch, "read", APR_HASH_KEY_STRING, ml_makefun(&req_read, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "rflush", APR_HASH_KEY_STRING, ml_makefun(&req_rflush, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "remaining", APR_HASH_KEY_STRING, ml_makefun(&req_remaining, APL_REQ_FUNTYPE_LUACFUN, p));

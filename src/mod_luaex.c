@@ -82,7 +82,7 @@ void *ml_check_object(lua_State *L, int index, const char*metaname) {
 }
 
 int  ml_push_object(lua_State*L,const void* data, const char*metaname) {
-    lua_boxpointer(L, data);
+    lua_boxpointer(L, (void*)data);
     luaL_getmetatable(L,metaname);
     lua_setmetatable(L, -2);
     return 1;
@@ -223,7 +223,7 @@ int ml_call_varg(lua_State *L, const char *func, const char *sig, va_list vl)
                     break;
                 case 'S':
                     size = 0;
-                    *va_arg(vl, const char **) = luaL_checklstring(L,nres,&size);
+                    *va_arg(vl, const char **) = luaL_checklstring(L,nres,(size_t*)&size);
                     *va_arg(vl, int *) = size;
                     break;
                 case 'b':  /* boolean result */
@@ -288,7 +288,7 @@ int call_lua_output_handle(lua_State *L,
 	apr_bucket *b;
 
 	if(eos) {
-		if ((status = apr_brigade_pflatten(bb, (char **)&data, &len, r->pool)) == APR_SUCCESS && len>=0) { 
+		if ((status = apr_brigade_pflatten(bb, (char **)&data, (apr_size_t*)&len, r->pool)) == APR_SUCCESS && len>=0) { 
 			status = ml_load_chunk(L,script,f->frec->name);
             if (status==0)
             {

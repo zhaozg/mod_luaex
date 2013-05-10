@@ -138,7 +138,7 @@ int lua_ap_recv(lua_State *L){
 
 			for (e = APR_BRIGADE_FIRST(bb); s==0 && e != APR_BRIGADE_SENTINEL(bb); e = APR_BUCKET_NEXT(e))
 			{
-				int blen;
+				apr_size_t blen;
 				const char* buf;
 
 				if (APR_BUCKET_IS_EOS(e))

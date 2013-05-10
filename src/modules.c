@@ -469,15 +469,61 @@ static int apreq_pre_init(apr_pool_t *p, apr_pool_t *plog,
 }
 
 static int apreq_post_init(apr_pool_t *p, apr_pool_t *plog,
-                           apr_pool_t *ptemp, server_rec *base_server)
+                           apr_pool_t *ptemp, server_rec *s)
 {
     apr_status_t status;
+	module *mime_module = ap_find_linked_module("mod_mime.c");
+	if (mime_module){
+		ap_configfile_t *f;
+		apr_hash_t* mime_type_extensions = NULL;
+		char l[MAX_STRING_LEN];
+		const char *types_confname = ap_get_module_config(s->module_config,
+			mime_module);
 
+		if (!types_confname) {
+			types_confname = AP_TYPES_CONFIG_FILE;
+		}
+
+		types_confname = ap_server_root_relative(p, types_confname);
+		if (!types_confname) {
+			ap_log_error(APLOG_MARK, APLOG_ERR, APR_EBADPATH, s, APLOGNO(01596)
+				"Invalid mime types config path %s",
+				(const char *)ap_get_module_config(s->module_config,
+				mime_module));
+			return HTTP_INTERNAL_SERVER_ERROR;
+		}
+		if ((status = ap_pcfg_openfile(&f, ptemp, types_confname))
+			!= APR_SUCCESS) {
+				ap_log_error(APLOG_MARK, APLOG_ERR, status, s, APLOGNO(01597)
+					"could not open mime types config file %s.",
+					types_confname);
+				return HTTP_INTERNAL_SERVER_ERROR;
+		}
+
+		mime_type_extensions = apr_hash_make(p);
+
+		while (!(ap_cfg_getline(l, MAX_STRING_LEN, f))) {
+			const char *ll = l, *ct;
+
+			if (l[0] == '#') {
+				continue;
+			}
+			ct = ap_getword_conf(p, &ll);
+
+			while (ll[0]) {
+				char *ext = ap_getword_conf(p, &ll);
+				ap_str_tolower(ext);
+				apr_hash_set(mime_type_extensions, ext, APR_HASH_KEY_STRING, ct);
+			}
+		}
+		ap_cfg_closefile(f);
+		apr_pool_userdata_set(mime_type_extensions, "mod_luaex",NULL, s->process->pool);
+	}
     ap_add_version_component(p, apr_psprintf(p, "mod_luaex-1.0"));
 
     status = apreq_post_initialize(p);
     if (status != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_STARTUP|APLOG_ERR, status, base_server,
+        ap_log_error(APLOG_MARK, APLOG_STARTUP|APLOG_ERR, status, s,
                      "Failed to post-initialize libapreq2");
         return HTTP_INTERNAL_SERVER_ERROR;
     }
