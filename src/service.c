@@ -129,7 +129,7 @@ int lua_ap_recv(lua_State *L){
 
 	if(type==LUA_TNUMBER || type==LUA_TNIL || type==LUA_TNONE){
 		apr_bucket_brigade *bb=get_bb(r);
-		bytes = luaL_optint(L, 2, 4*bytes);
+		bytes = luaL_optint(L, 2, bytes);
 		s = ap_get_brigade(r->input_filters, bb, AP_MODE_READBYTES,APR_BLOCK_READ,bytes);
 
 		if(s==0){
@@ -258,13 +258,9 @@ int ml_process_connection(conn_rec *c)
         conf->spec.package_cpaths = dcfg->package_cpaths;
         conf->spec.package_paths = dcfg->package_paths;
         conf->spec.cb = &lua_open_callback;
-#if AP_SERVER_MINORVERSION_NUMBER==5
+
         L = ap_lua_get_lua_state(c->pool,&conf->spec,r);
-#elif  AP_SERVER_MINORVERSION_NUMBER==4
-		L = ap_lua_get_lua_state(c->pool,&conf->spec);
-#else
-#error "Only support 2.4 and 2.5
-#endif
+
         if (!L){
             return HTTP_INTERNAL_SERVER_ERROR;
         }

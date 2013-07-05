@@ -1,5 +1,5 @@
 #include "mod_luaex.h"
-
+#include "mod_lua.h"
 APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module = NULL;
 
 /************************************************************************/
@@ -9,29 +9,6 @@ APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module = NULL;
 static int req_header_only (request_rec *r) {
 	return r->header_only;
 }
-
-
-static int lua_ap_unescape (lua_State *L) {
-	size_t x,y;
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char *escaped = luaL_checklstring(L, 2, &x);
-	char *plain = apr_pstrdup(r->pool, escaped);
-	strncpy(plain, escaped, x);
-	y = ap_unescape_urlencoded(plain);
-	lua_pushstring(L, plain);
-	return 1;
-}
-
-
-static int lua_ap_escape (lua_State *L) {
-	size_t x;
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char *plain = luaL_checklstring(L, 2, &x);
-	char *escaped = ap_escape_urlencoded(r->pool, plain);
-	lua_pushstring(L, escaped);
-	return 1;
-}
-
 
 static int lua_ap_escapehtml (lua_State *L) {
 	const char *escaped;
@@ -109,107 +86,6 @@ static int req_get_server_port (lua_State *L) {
 	lua_pushnumber (L, ap_get_server_port(r));
 	return 1;
 }
-
-
-static int lua_ap_expr(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char *expr = luaL_checkstring(L, 2);
-	int x = 0;
-	const char *err;
-	ap_expr_info_t res = {0};
-
-	res.filename = NULL;
-	res.flags = 0;
-	res.line_number = 0;
-	res.module_index = 0;
-
-	err = ap_expr_parse(r->pool, r->pool, &res, expr, NULL);
-	if (!err) {
-		x = ap_expr_exec(r, &res, &err);
-		lua_pushboolean(L, x);
-		if (x < 0) {
-			lua_pushstring(L, err);
-			return 2;
-		}
-		return 1;
-	}
-	else {
-		lua_pushboolean(L, 0);
-		lua_pushstring(L, err);
-		return 2;
-	}
-	lua_pushboolean(L, 0);
-	return 1;
-}
-
-/*
- * lua_ap_regex; r:regex(string, pattern) - Evaluates a regex and returns
- * captures if matched
- */
-static int lua_ap_regex(lua_State *L)
-{
-    request_rec    *r;
-    int i, rv;
-    const char     *pattern, *source;
-    char           *err;
-    ap_regex_t regex;
-    ap_regmatch_t matches[AP_MAX_REG_MATCH];
-
-    luaL_checktype(L, 1, LUA_TUSERDATA);
-    luaL_checktype(L, 2, LUA_TSTRING);
-    luaL_checktype(L, 3, LUA_TSTRING);
-    r = CHECK_REQUEST_OBJECT(1);
-    pattern = lua_tostring(L, 2);
-    source = lua_tostring(L, 3);
-
-    rv = ap_regcomp(&regex, pattern, 0);
-    if (rv) {
-        lua_pushboolean(L, 0);
-        err = apr_palloc(r->pool, 256);
-        ap_regerror(rv, &regex, err, 256);
-        lua_pushstring(L, err);
-        return 2;
-    }
-
-    rv = ap_regexec(&regex, source, AP_MAX_REG_MATCH, matches, 0);
-    if (rv < 0) {
-        lua_pushboolean(L, 0);
-        err = apr_palloc(r->pool, 256);
-        ap_regerror(rv, &regex, err, 256);
-        lua_pushstring(L, err);
-        return 2;
-    }
-		lua_newtable(L);
-		for (i = 0; i < regex.re_nsub; i++) {
-			lua_pushinteger(L, i);
-			if (matches[i].rm_so >= 0 && matches[i].rm_eo >= 0)
-				lua_pushstring(L,
-							   apr_pstrndup(r->pool, source + matches[i].rm_so,
-											matches[i].rm_eo - matches[i].rm_so));
-			else
-				lua_pushnil(L);
-			lua_settable(L, -3);
-
-		}
-
-    return 1;
-}
-
-
-
-static int lua_ap_options(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	char options[128];
-	int opts;
-	/*~~~~~~~~~~~~~~~~~~*/
-	opts = ap_allow_options(r);
-	sprintf(options, "%s %s %s %s %s %s", (opts&OPT_INDEXES) ? "Indexes" : "", (opts&OPT_INCLUDES) ? "Includes" : "", (opts&OPT_SYM_LINKS) ? "FollowSymLinks" : "", (opts&OPT_EXECCGI) ? "ExecCGI" : "", (opts&OPT_MULTI) ? "MultiViews" : "", (opts&OPT_ALL) == OPT_ALL ? "All" : "" );
-	lua_pushstring(L, options);
-	return 1;
-}
-
 
 static int lua_ap_allowoverrides(lua_State *L) 
 {
@@ -565,18 +441,6 @@ static int req_get_client_block (lua_State *L) {
 }
 
 /*
-** Consulting remaining field of request_rec.
-** Uses the request_rec defined as an upvalue.
-** Return a Lua number.
-*/
-static int req_remaining (lua_State *L) {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-	lua_pushnumber (L, (lua_Number)r->remaining);
-	return 1;
-}
-
-/*
 ** Binding to ap_discard_request_body.
 ** Uses the request_rec defined as an upvalue.
 ** Returns a status code.
@@ -588,6 +452,7 @@ static int req_discard_request_body (lua_State *L) {
 	return 1;
 }
 
+/* FIXME: zhaozg */
 static int req_add_output_filter(lua_State *L) {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
 	const char* filter = luaL_checkstring(L,2);
@@ -596,32 +461,6 @@ static int req_add_output_filter(lua_State *L) {
 	apr_pool_userdata_set(L,ML_OUTPUT_FILTER_KEY4LUA, apr_pool_cleanup_null, r->pool);
 	lua_pushboolean(L,f!=NULL);
 	return 1;
-}
-
-
-
-/** 
- * ap_auth_type (request_rec *r) */
-static int lua_ap_auth_type (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    const char * returnValue = ap_auth_type(r);
-    lua_pushstring(L, returnValue);
-    return 1;
-}
-
-
-/** 
- * ap_some_auth_required (request_rec *r)
- * Can be used within any handler to determine if any authentication
- * is required for the current request
- * @param r The current request
- * @return 1 if authentication is required, 0 otherwise
-  */
-static int lua_ap_some_auth_required (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    int returnValue = ap_some_auth_required(r);
-    lua_pushboolean(L, returnValue);
-    return 1;
 }
 
 /** 
@@ -637,161 +476,6 @@ static int lua_ap_add_version_component (lua_State *L) {
     return 0;
 }
 
-
-
-/** 
- * ap_context_prefix (request_rec *r)
- * Get the context_prefix for a request. The context_prefix URI prefix
- * maps to the context_document_root on disk.
- * @param r The request
-  */
-static int lua_ap_context_prefix (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    const char * returnValue = ap_context_prefix(r);
-    lua_pushstring(L, returnValue);
-    return 1;
-}
-
-
-/** 
- * ap_set_context_info (request_rec *r, const char *prefix,
-                                     const char *document_root) Set context_prefix and context_document_root for a request.
- * @param r The request
- * @param prefix the URI prefix, without trailing slash
- * @param document_root the corresponding directory on disk, without trailing
- * slash
- * @note If one of prefix of document_root is NULL, the corrsponding
- * property will not be changed.
-  */
-static int lua_ap_set_context_info (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    const char* prefix = luaL_checkstring(L, 2);
-    const char* document_root = luaL_checkstring(L, 3);
-    ap_set_context_info(r, prefix, document_root);
-    return 0;
-}
-
-
-/** 
- * ap_os_escape_path (apr_pool_t *p, const char *path, int partial)
- * convert an OS path to a URL in an OS dependant way.
- * @param p The pool to allocate from
- * @param path The path to convert
- * @param partial if set, assume that the path will be appended to something
- *        with a '/' in it (and thus does not prefix "./")
- * @return The converted URL
-  */
-static int lua_ap_os_escape_path (lua_State *L) {
-
-    char * returnValue;
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-    const char* path = luaL_checkstring(L,2);
-    int partial = 0;
-    if ( lua_isboolean( L, 3 ) ) 
-	    partial =  lua_toboolean( L, 3 );
-    returnValue = ap_os_escape_path(r->pool, path, partial);
-    lua_pushstring(L, returnValue);
-    return 1;
-}
-
-
-/** 
- * ap_escape_logitem (apr_pool_t *p, const char *str)
- * Escape a string for logging
- * @param p The pool to allocate from
- * @param str The string to escape
- * @return The escaped string
-  */
-static int lua_ap_escape_logitem (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    const char* str = luaL_checkstring(L, 2);
-
-    char *returnValue = ap_escape_logitem(r->pool, str);
-    lua_pushstring(L, returnValue);
-    return 1;
-}
-
-
-/** 
- * ap_set_keepalive (request_rec *r)
- * Set the keepalive status for this request
- * @param r The current request
- * @return 1 if keepalive can be set, 0 otherwise
-  */
-static int lua_ap_set_keepalive (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    int returnValue = ap_set_keepalive(r);
-    lua_pushboolean(L, returnValue);
-    return 1;
-}
-
-/** 
- * ap_make_etag (request_rec *r, int force_weak)
- * Construct an entity tag from the resource information.  If it's a real
- * file, build in some of the file characteristics.
- * @param r The current request
- * @param force_weak Force the entity tag to be weak - it could be modified
- *                   again in as short an interval.
- * @return The entity tag
-  */
-static int lua_ap_make_etag (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    char * returnValue;
-    int force_weak;
-    luaL_checktype(L, 2, LUA_TBOOLEAN);
-    force_weak = luaL_optint(L, 2, 0);
-    returnValue = ap_make_etag(r, force_weak);
-    lua_pushstring(L, returnValue);
-    return 1;
-}
-
-
-/** 
- * ap_send_interim_response (request_rec *r, int send_headers)
- * Send an interim (HTTP 1xx) response immediately.
- * @param r The request
- * @param send_headers Whether to send&clear headers in r->headers_out
-  */
-static int lua_ap_send_interim_response (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    int send_headers;
-    if ( lua_isboolean( L, 2 ) ) send_headers =  lua_toboolean( L, 2 );
-    ap_send_interim_response(r, send_headers);
-    return 0;
-}
-
-
-/** 
- * ap_get_server_name (request_rec *r)
- * Get the current server name from the request
- * @param r The current request
- * @return the server name
-  */
-static int lua_ap_get_server_name (lua_State *L) {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-    const char * returnValue = ap_get_server_name(r);
-    lua_pushstring(L, returnValue);
-    return 1;
-}
-
-
-/** 
- * ap_custom_response (request_rec *r, int status, const char *string)
- * Install a custom response handler for a given status
- * @param r The current request
- * @param status The status for which the custom response should be used
- * @param string The custom response.  This can be a static string, a file
- *               or a URL
-  */
-static int lua_ap_custom_response (lua_State *L) {
-    request_rec *r = CHECK_REQUEST_OBJECT(1);
-    int status = luaL_checkint(L, 2);
-    const char* string = luaL_checkstring(L, 3);
-    ap_custom_response(r, status, string);
-    return 0;
-}
 
 /** 
  * ap_satisfies (request_rec *r)
@@ -815,21 +499,6 @@ static int lua_ap_satisfies (lua_State *L) {
 }
 
 
-/** 
- * ap_auth_name (request_rec *r)
- * Return the current Authorization realm
- * @param r The current request
- * @return The current authorization realm
-  */
-static int lua_ap_auth_name (lua_State *L) {
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char * returnValue = ap_auth_name(r);
-
-    lua_pushstring(L, returnValue);
-    return 1;
-}
-
-
 static int lua_ap_get_limit_req_body(lua_State *L) 
 {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -837,71 +506,12 @@ static int lua_ap_get_limit_req_body(lua_State *L)
 	return 1;
 }
 
-
 static int lua_ap_request_has_body(lua_State *L) 
 {
 	request_rec *r = CHECK_REQUEST_OBJECT(1);
 	lua_pushboolean(L, ap_request_has_body(r));
 	return 1;
 }
-
-
-static int lua_ap_is_initial_req(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	lua_pushboolean(L, ap_is_initial_req(r));
-	return 1;
-}
-
-static int lua_ap_runtime_dir_relative(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char*file = luaL_optstring(L, 2, ".");
-	lua_pushstring(L, ap_runtime_dir_relative(r->pool, file));
-	return 1;
-}
-
-static int lua_ap_set_document_root(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char* root = luaL_checkstring(L, 2);
-	ap_set_document_root(r, root);
-	return 0;
-}
-
-static int lua_ap_stat(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char* filename = luaL_checkstring(L, 2);
-	apr_finfo_t file_info;
-	apr_stat(&file_info, filename, APR_FINFO_NORM, r->pool);
-	lua_newtable(L);
-
-	lua_pushstring(L, "mtime");
-	lua_pushinteger(L, (lua_Integer)file_info.mtime);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "atime");
-	lua_pushinteger(L, (lua_Integer)file_info.atime);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "ctime");
-	lua_pushinteger(L, (lua_Integer)file_info.ctime);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "size");
-	lua_pushinteger(L, (lua_Integer)file_info.size);
-	lua_settable(L, -3);
-
-	lua_pushstring(L, "filetype");
-	lua_pushinteger(L, file_info.filetype);
-	lua_settable(L, -3);
-
-	return 1;
-}
-
-
-
 
 static int req_print (lua_State *L) {
     int i = 0;
@@ -916,22 +526,6 @@ static int req_print (lua_State *L) {
         status =  (ap_rwrite(s, l, r)==(int)l) ? 1 : 0;
     }
     return pushresult(L, status, r->filename);
-}
-
-
-static int lua_ap_add_input_filter(lua_State *L) 
-{
-	request_rec *r = CHECK_REQUEST_OBJECT(1);
-	const char* filterName = luaL_checkstring(L, 2);
-	ap_filter_rec_t *filter = ap_get_input_filter_handle(filterName);
-	if (filter) {
-		ap_add_input_filter_handle(filter, NULL, r, r->connection);
-		lua_pushboolean(L, 1);
-	}
-	else {
-		lua_pushboolean(L, 0);
-	}
-	return 1;
 }
 
 static int lua_ap_add_output_filter(lua_State *L) 
@@ -1033,33 +627,11 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	apr_hash_set(dispatch, "header_only", APR_HASH_KEY_STRING, ml_makefun(&req_header_only, APL_REQ_FUNTYPE_BOOLEAN, p));
 
 	/* add function */
-	apr_hash_set(dispatch, "escape", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_escape, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "unescape", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_unescape, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "escapehtml", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_escapehtml, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "expr", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_expr, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "regex", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_regex, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "options", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_options, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "allowoverrides", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_allowoverrides, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "auth_type", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_auth_type, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "auth_name", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_auth_name, APL_REQ_FUNTYPE_LUACFUN, p));
-
-	apr_hash_set(dispatch, "custom_response", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_custom_response, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "get_server_name", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_get_server_name, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "send_interim_response", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_send_interim_response, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "make_etag", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_make_etag, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "set_keepalive", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_set_keepalive, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "escape_logitem", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_escape_logitem, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "os_escape_path", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_os_escape_path, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "set_context_info", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_set_context_info, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "context_prefix", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_context_prefix, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "add_version_component", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_add_version_component, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "some_auth_required", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_some_auth_required, APL_REQ_FUNTYPE_LUACFUN, p));
 
-	apr_hash_set(dispatch, "stat", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_stat, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "set_document_root", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_set_document_root, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "runtime_dir_relative", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_runtime_dir_relative, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "is_initial_req", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_is_initial_req, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "request_has_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_request_has_body, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "get_limit_req_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_get_limit_req_body, APL_REQ_FUNTYPE_LUACFUN, p));
 
@@ -1092,7 +664,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	
 	apr_hash_set(dispatch, "read", APR_HASH_KEY_STRING, ml_makefun(&req_read, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "rflush", APR_HASH_KEY_STRING, ml_makefun(&req_rflush, APL_REQ_FUNTYPE_LUACFUN, p));
-	apr_hash_set(dispatch, "remaining", APR_HASH_KEY_STRING, ml_makefun(&req_remaining, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "get_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_get_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "setup_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_setup_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "should_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_should_client_block, APL_REQ_FUNTYPE_LUACFUN, p));

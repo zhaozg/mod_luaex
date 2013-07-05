@@ -316,7 +316,6 @@ typedef struct
 	lua_State *L;
 } lua_filter_ctx;
 
-AP_LUA_DECLARE(int) ap_lua_init(lua_State *L, apr_pool_t * p);
 AP_LUA_DECLARE(void) ap_lua_load_config_lmodule(lua_State *L);
 
 static void lua_open_callback(lua_State *L, apr_pool_t *p, void *ctx)
