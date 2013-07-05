@@ -1,9 +1,7 @@
-
-
 #   the used tools
-APXS=apxs
+APXS=apxs -i -a -c -n luaex
 APACHECTL=apachectl
-HTTPDSRC=/mnt/hgfs/httpd
+HTTPDSRC=../httpd
 
 SRC=src/mod_luaex.c src/apreq.c src/buckets.c src/extends.c src/handle.c src/modules.c src/request.c src/reslist.c src/server.c src/service.c src/table.c \
 src/apreq2/cookie.c src/apreq2/module.c src/apreq2/parser.c src/apreq2/parser_multipart.c src/apreq2/util.c src/apreq2/error.c src/apreq2/param.c \
@@ -11,7 +9,6 @@ src/apreq2/parser_header.c src/apreq2/parser_urlencoded.c  src/apreq2/version.c
 
 ###############################################################################################
 #   additional defines, includes and libraries
-#DEFS=-Dmy_define=my_value
 INCLUDES=-I$(HTTPDSRC)/modules/lua -Isrc/apreq2
 LIBS=-L/usr/local/lib -lluajit-5.1 -lapr-2
 
@@ -21,7 +18,7 @@ shared=mod_luaex.so
 all: $(shared)
 
 $(shared):	$(SRC)
-	$(APXS) -DWall  $(INCLUDES) $(LIBS) $(SRC)
+	$(APXS) -DWall $(INCLUDES) $(LIBS) $(SRC) 
 
 #   cleanup
 clean:
