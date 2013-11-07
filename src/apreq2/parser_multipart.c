@@ -545,7 +545,7 @@ APREQ_DECLARE_PARSER(apreq_parse_multipart)
                     ctx->status = MFD_ERROR;
                     return s;
                 }
-                len = off;
+                len = (apr_size_t)off;
                 param = apreq_param_make(pool, ctx->param_name,
                                          strlen(ctx->param_name),
                                          NULL, len);

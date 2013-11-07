@@ -20,6 +20,7 @@ struct dir_config {
     apr_size_t          brigade_limit;
 
     apr_table_t        *filter;
+	apr_array_header_t *monitor;
     apr_hash_t         *resource;	/* hash table for usage->apr_reslist_t */
     lua_State          *L;
 };

@@ -24,6 +24,7 @@
 #include "http_request.h"
 #include "apr_strings.h"
 #include "http_connection.h"
+#include "mpm_common.h"
 
 #include "apreq_error.h"
 #include "apreq_util.h"
@@ -130,6 +131,37 @@ const char *luaex_cmd_Reslist(cmd_parms *cmd,
 										 void *dcfg,
 										 const char *resource,const char *script);
 
+typedef struct ml_monitor {
+	const char* script;
+	const char* handler;
+}ml_monitor;
+
+static const char *Luaex_Monitor(cmd_parms *cmd, void *dcfg,
+	const char *script,const char *handler)
+{
+	struct dir_config *conf = dcfg;
+	const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+	ml_monitor *monitor;
+
+	if (err != NULL)
+		return err;
+
+	if (conf->monitor == NULL) {
+		conf->monitor = apr_array_make(cmd->pool, 16, sizeof(ml_monitor));
+	}
+
+	if (conf->monitor == NULL) 
+		return "Out of memory";
+	if(conf->monitor->nelts==16)
+		return "Only allow 16 crontab rules";
+	monitor = apr_array_push(conf->monitor);
+
+	monitor->script = script;
+	monitor->handler = handler ? handler : "handle";
+
+	return NULL;
+}
+
 static const command_rec apreq_cmds[] =
 {
     AP_INIT_TAKE1("Luaex_TempDir", apreq_set_temp_dir, NULL, OR_ALL,
@@ -138,7 +170,8 @@ static const command_rec apreq_cmds[] =
                   "Maximum amount of data that will be fed into a parser."),
     AP_INIT_TAKE1("Luaex_BrigadeLimit", apreq_set_brigade_limit, NULL, OR_ALL,
                   "Maximum in-memory bytes a brigade may use."),
-
+	AP_INIT_TAKE12("Luaex_Monitor", Luaex_Monitor, NULL, OR_ALL,
+				  "Monitor hook"),
     AP_INIT_TAKE2("Luaex_OutputFilter", luaex_cmd_OuputFilter, NULL, OR_ALL,
                   "Luaex VM Output Filter Script "
                   "Lua_Output_Filter FilterName LuaScript"
@@ -530,6 +563,15 @@ static int apreq_post_init(apr_pool_t *p, apr_pool_t *plog,
     return OK;
 }
 
+static int luaex_monitor(apr_pool_t *p, server_rec *s){
+	char date_str[APR_PATH_MAX];
+	apr_time_t now = apr_time_now();
+	apr_status_t rc = apr_rfc822_date(date_str,now);
+	if(rc==0){
+		printf("TICK: %s\n",date_str);
+	}
+	return 0;
+}
 static void register_hooks (apr_pool_t *p)
 {
     /* APR_HOOK_FIRST because we want other modules to be able to
@@ -541,10 +583,11 @@ static void register_hooks (apr_pool_t *p)
      * (to prevent further modifications) before the server forks.
      */
     ap_hook_post_config(apreq_post_init, NULL, NULL, APR_HOOK_LAST);
-
     ap_hook_process_connection(ml_process_connection,NULL,NULL, APR_HOOK_MIDDLE);
     ap_register_input_filter(MLE_FILTER_NAME, ml_filter, apreq_filter_init, AP_FTYPE_PROTOCOL-1);
-    
+
+	ap_hook_monitor(luaex_monitor, NULL, NULL, APR_HOOK_MIDDLE);
+
     ml_register_hooks(p);
 }
 
