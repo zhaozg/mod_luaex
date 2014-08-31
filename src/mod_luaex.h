@@ -86,20 +86,22 @@
 #define APR_SHM_MAXSIZE (64 * 1024 * 1024)
 #define MOD_LUA_STRING_VERSION  "mod_lua/1.0"
 
-typedef enum {
-	STORAGE_SCMODE_UNSET = UNSET,
-	STORAGE_SCMODE_NONE  = 0,
-	STORAGE_SCMODE_SHMHT = 1,
-	STORAGE_SCMODE_SHMCB = 2,
+typedef enum
+{
+  STORAGE_SCMODE_UNSET = UNSET,
+  STORAGE_SCMODE_NONE  = 0,
+  STORAGE_SCMODE_SHMHT = 1,
+  STORAGE_SCMODE_SHMCB = 2,
 } storage_scmode_t;
 
 /*
 * Define the STORAGE mutex modes
 */
-typedef enum {
-	STORAGE_MUTEXMODE_UNSET  = UNSET,
-	STORAGE_MUTEXMODE_NONE   = 0,
-	STORAGE_MUTEXMODE_USED   = 1
+typedef enum
+{
+  STORAGE_MUTEXMODE_UNSET  = UNSET,
+  STORAGE_MUTEXMODE_NONE   = 0,
+  STORAGE_MUTEXMODE_USED   = 1
 } storage_mutexmode_t;
 
 #define MAX_HANDLERS 16
@@ -118,44 +120,45 @@ typedef enum {
 
 #define VHOST(r) (r->server)
 
-typedef struct {
-	const char *name;
-	int val;
+typedef struct
+{
+  const char *name;
+  int val;
 } ml_constants;
 
 void ml_define_constants (lua_State *L, const  ml_constants tab[]);
 
 //output filter
-#define ML_OUTPUT_FILTER_KEY4LUA	"luavm4outputfilter"
+#define ML_OUTPUT_FILTER_KEY4LUA  "luavm4outputfilter"
 
 //socache
-#define PROVIDER	"provider"
-#define SOCACHE		"socache"
+#define PROVIDER  "provider"
+#define SOCACHE   "socache"
 
 #define OBJECT(name)  name"_object"
 #define LIBNAME(name) name
 
 void *ml_check_object(lua_State *L, int index, const char*metaname);
-int  ml_push_object(lua_State*L,const void* data, const char*metaname);
+int  ml_push_object(lua_State*L, const void* data, const char*metaname);
 #define setstr(key,value)\
-	lua_pushstring(L,key);\
-	if (value)  lua_pushstring(L,value); else lua_pushnil(L);\
-	lua_settable(L,-3)
+  lua_pushstring(L,key);\
+  if (value)  lua_pushstring(L,value); else lua_pushnil(L);\
+  lua_settable(L,-3)
 
 #define setnum(key,value)\
-	lua_pushstring(L,key);\
-	lua_pushnumber(L,(double)value);\
-	lua_settable(L,-3)
+  lua_pushstring(L,key);\
+  lua_pushnumber(L,(double)value);\
+  lua_settable(L,-3)
 
 #define setnum2(key,value)\
-	lua_pushnumber(L,key);\
-	lua_pushnumber(L,(double)value);\
-	lua_settable(L,-3)
+  lua_pushnumber(L,key);\
+  lua_pushnumber(L,(double)value);\
+  lua_settable(L,-3)
 
 #define setnum3(key,value)\
-	lua_pushnumber(L,key);\
-	lua_pushstring(L,value);\
-	lua_settable(L,-3)
+  lua_pushnumber(L,key);\
+  lua_pushstring(L,value);\
+  lua_settable(L,-3)
 
 
 apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb);
@@ -196,28 +199,31 @@ apr_status_t ml_register_hooks (apr_pool_t *p);
 #define APACHE_LIBNAME     "ap"
 #define POST_BUFFER_SIZE   (64 * 1024)
 
-typedef struct ml_slotmem_t{
-    ap_slotmem_provider_t   *_provider;
-    ap_slotmem_instance_t   *_instance;
-    apr_size_t              _size;
-    unsigned int            _num;
-    ap_slotmem_type_t       _type;
-}ml_slotmem;
+typedef struct ml_slotmem_t
+{
+  ap_slotmem_provider_t   *_provider;
+  ap_slotmem_instance_t   *_instance;
+  apr_size_t              _size;
+  unsigned int            _num;
+  ap_slotmem_type_t       _type;
+} ml_slotmem;
 
-typedef struct ml_socache_t{
-    ap_socache_provider_t* _provider;
-    ap_socache_instance_t* _instance;
-    server_rec			 * _server;
-    apr_pool_t			 * _pool;
-    apr_time_t			 _timeout;
+typedef struct ml_socache_t
+{
+  ap_socache_provider_t* _provider;
+  ap_socache_instance_t* _instance;
+  server_rec       * _server;
+  apr_pool_t       * _pool;
+  apr_time_t       _timeout;
 
-    int	_maxdatalen;
-}ml_socache;
+  int _maxdatalen;
+} ml_socache;
 
-typedef struct {
-    ap_dbd_t *dbd;
-    server_rec *s;
-}ml_dbd;
+typedef struct
+{
+  ap_dbd_t *dbd;
+  server_rec *s;
+} ml_dbd;
 
 
 extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
@@ -246,10 +252,10 @@ extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 #define PUSH_PARAM_OBJECT(x)    ml_push_object(L, x, "mod_luaex.param")
 
 apr_table_t* ml_check_apr_table(lua_State *L, int index);
-void ml_push_apr_table(lua_State *L, apr_table_t *t,request_rec* r,const char*name,apr_pool_t* pool);
+void ml_push_apr_table(lua_State *L, apr_table_t *t, request_rec* r, const char*name, apr_pool_t* pool);
 
 int ml_ext_apr_table(lua_State*L);
-int ml_luaopen_apreq(lua_State *L,apr_pool_t *p);
+int ml_luaopen_apreq(lua_State *L, apr_pool_t *p);
 int ml_luaopen_buckets(lua_State *L);
 int ml_luaopen_extends(lua_State*L);
 
@@ -283,10 +289,10 @@ int ml_reslist_release(lua_State*L);
 int ml_reslist_invalidate(lua_State*L);
 #endif
 
-void pstack_dump(lua_State *L,const char *msg);
+void pstack_dump(lua_State *L, const char *msg);
 int ml_apache2_extends(lua_State*L);
 void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p);
-apreq_handle_t* ml_r2apreq(lua_State*L,int n);
+apreq_handle_t* ml_r2apreq(lua_State*L, int n);
 req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool);
 
 # ifdef WIN32

@@ -34,238 +34,251 @@
 
 static void *apreq_create_dir_config(apr_pool_t *p, char *d)
 {
-    /* d == OR_ALL */
-    struct dir_config *dc = apr_palloc(p, sizeof *dc);
-    dc->temp_dir      = NULL;
-    dc->read_limit    = -1;
-    dc->brigade_limit = -1;
-    dc->filter        = NULL;
-    dc->resource      = NULL;
-    dc->L             = NULL;
-    return dc;
+  /* d == OR_ALL */
+  struct dir_config *dc = apr_palloc(p, sizeof * dc);
+  dc->temp_dir      = NULL;
+  dc->read_limit    = -1;
+  dc->brigade_limit = -1;
+  dc->filter        = NULL;
+  dc->resource      = NULL;
+  dc->L             = NULL;
+  return dc;
 }
 
 static void *apreq_merge_dir_config(apr_pool_t *p, void *a_, void *b_)
 {
-    struct dir_config *a = a_, *b = b_, *c = apr_palloc(p, sizeof *c);
+  struct dir_config *a = a_, *b = b_, *c = apr_palloc(p, sizeof * c);
 
-    c->temp_dir      = (b->temp_dir != NULL)            /* overrides ok */
-                      ? b->temp_dir : a->temp_dir;
+  c->temp_dir      = (b->temp_dir != NULL)            /* overrides ok */
+                     ? b->temp_dir : a->temp_dir;
 
-    c->brigade_limit = (b->brigade_limit == (apr_size_t)-1) /* overrides ok */
-                      ? a->brigade_limit : b->brigade_limit;
+  c->brigade_limit = (b->brigade_limit == (apr_size_t) - 1) /* overrides ok */
+                     ? a->brigade_limit : b->brigade_limit;
 
-    c->read_limit    = (b->read_limit < a->read_limit)  /* yes, min */
-                      ? b->read_limit : a->read_limit;
+  c->read_limit    = (b->read_limit < a->read_limit)  /* yes, min */
+                     ? b->read_limit : a->read_limit;
 
-    c->filter = (a->filter && b->filter) ? apr_table_overlay(p, a->filter, b->filter) : ( a->filter ? a->filter : b->filter);
+  c->filter = (a->filter && b->filter) ? apr_table_overlay(p, a->filter, b->filter) : ( a->filter ? a->filter : b->filter);
 
-    return c;
+  return c;
 }
 
 static const char *apreq_set_temp_dir(cmd_parms *cmd, void *data,
                                       const char *arg)
 {
-    struct dir_config *conf = data;
-    const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+  struct dir_config *conf = data;
+  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
 
-    if (err != NULL)
-        return err;
+  if (err != NULL)
+    return err;
 
-    conf->temp_dir = arg;
-    return NULL;
+  conf->temp_dir = arg;
+  return NULL;
 }
 
 static const char *apreq_set_read_limit(cmd_parms *cmd, void *data,
                                         const char *arg)
 {
-    struct dir_config *conf = data;
-    const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+  struct dir_config *conf = data;
+  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
 
-    if (err != NULL)
-        return err;
+  if (err != NULL)
+    return err;
 
-    conf->read_limit = apreq_atoi64f(arg);
-    return NULL;
+  conf->read_limit = apreq_atoi64f(arg);
+  return NULL;
 }
 
 static const char *apreq_set_brigade_limit(cmd_parms *cmd, void *data,
-                                           const char *arg)
+    const char *arg)
 {
-    struct dir_config *conf = data;
-    const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+  struct dir_config *conf = data;
+  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
 
-    if (err != NULL)
-        return err;
+  if (err != NULL)
+    return err;
 
-    conf->brigade_limit = (apr_size_t)apreq_atoi64f(arg);
-    return NULL;
+  conf->brigade_limit = (apr_size_t)apreq_atoi64f(arg);
+  return NULL;
 }
 
 apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb);
 
 static const char *luaex_cmd_OuputFilter(cmd_parms *cmd,
-                            void *dcfg,
-                            const char *filter,const char *script)
+    void *dcfg,
+    const char *filter, const char *script)
 {
-    struct dir_config *conf = dcfg;
-    const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+  struct dir_config *conf = dcfg;
+  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
 
-    if (err != NULL)
-        return err;
+  if (err != NULL)
+    return err;
 
-    if (conf->filter == NULL) {
-        conf->filter = apr_table_make(cmd->pool,8);
-    }
+  if (conf->filter == NULL)
+  {
+    conf->filter = apr_table_make(cmd->pool, 8);
+  }
 
-    if (conf->filter == NULL) 
-        return "Out of memory";
+  if (conf->filter == NULL)
+    return "Out of memory";
 
-    apr_table_set(conf->filter,filter ,script);
-    ap_register_output_filter(filter, lua_output_filter, NULL, AP_FTYPE_RESOURCE);
-    return NULL;
+  apr_table_set(conf->filter, filter , script);
+  ap_register_output_filter(filter, lua_output_filter, NULL, AP_FTYPE_RESOURCE);
+  return NULL;
 }
 
 
 const char *luaex_cmd_Reslist(cmd_parms *cmd,
-										 void *dcfg,
-										 const char *resource,const char *script);
+                              void *dcfg,
+                              const char *resource, const char *script);
 
-typedef struct ml_monitor {
-	const char* script;
-	const char* handler;
-}ml_monitor;
+typedef struct ml_monitor
+{
+  const char* script;
+  const char* handler;
+} ml_monitor;
 
 static const char *Luaex_Monitor(cmd_parms *cmd, void *dcfg,
-	const char *script,const char *handler)
+                                 const char *script, const char *handler)
 {
-	struct dir_config *conf = dcfg;
-	const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
-	ml_monitor *monitor;
+  struct dir_config *conf = dcfg;
+  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+  ml_monitor *monitor;
 
-	if (err != NULL)
-		return err;
+  if (err != NULL)
+    return err;
 
-	if (conf->monitor == NULL) {
-		conf->monitor = apr_array_make(cmd->pool, 16, sizeof(ml_monitor));
-	}
+  if (conf->monitor == NULL)
+  {
+    conf->monitor = apr_array_make(cmd->pool, 16, sizeof(ml_monitor));
+  }
 
-	if (conf->monitor == NULL) 
-		return "Out of memory";
-	if(conf->monitor->nelts==16)
-		return "Only allow 16 crontab rules";
-	monitor = apr_array_push(conf->monitor);
+  if (conf->monitor == NULL)
+    return "Out of memory";
+  if (conf->monitor->nelts == 16)
+    return "Only allow 16 crontab rules";
+  monitor = apr_array_push(conf->monitor);
 
-	monitor->script = script;
-	monitor->handler = handler ? handler : "handle";
+  monitor->script = script;
+  monitor->handler = handler ? handler : "handle";
 
-	return NULL;
+  return NULL;
 }
 
 static const command_rec apreq_cmds[] =
 {
-    AP_INIT_TAKE1("Luaex_TempDir", apreq_set_temp_dir, NULL, OR_ALL,
-                  "Default location of temporary directory"),
-    AP_INIT_TAKE1("Luaex_ReadLimit", apreq_set_read_limit, NULL, OR_ALL,
-                  "Maximum amount of data that will be fed into a parser."),
-    AP_INIT_TAKE1("Luaex_BrigadeLimit", apreq_set_brigade_limit, NULL, OR_ALL,
-                  "Maximum in-memory bytes a brigade may use."),
-	AP_INIT_TAKE12("Luaex_Monitor", Luaex_Monitor, NULL, OR_ALL,
-				  "Monitor hook"),
-    AP_INIT_TAKE2("Luaex_OutputFilter", luaex_cmd_OuputFilter, NULL, OR_ALL,
-                  "Luaex VM Output Filter Script "
-                  "Lua_Output_Filter FilterName LuaScript"
-                  "(`@PATH --LuaScript handle Script FilePath', `lua handle script content')"),
+  AP_INIT_TAKE1("Luaex_TempDir", apreq_set_temp_dir, NULL, OR_ALL,
+  "Default location of temporary directory"),
+  AP_INIT_TAKE1("Luaex_ReadLimit", apreq_set_read_limit, NULL, OR_ALL,
+  "Maximum amount of data that will be fed into a parser."),
+  AP_INIT_TAKE1("Luaex_BrigadeLimit", apreq_set_brigade_limit, NULL, OR_ALL,
+  "Maximum in-memory bytes a brigade may use."),
+  AP_INIT_TAKE12("Luaex_Monitor", Luaex_Monitor, NULL, OR_ALL,
+  "Monitor hook"),
+  AP_INIT_TAKE2("Luaex_OutputFilter", luaex_cmd_OuputFilter, NULL, OR_ALL,
+  "Luaex VM Output Filter Script "
+  "Lua_Output_Filter FilterName LuaScript"
+  "(`@PATH --LuaScript handle Script FilePath', `lua handle script content')"),
 #ifdef ML_HAVE_RESLIST
-	AP_INIT_TAKE2("Luaex_Reslist", luaex_cmd_Reslist, NULL, OR_ALL,
-                  "Luaex Resource List management"
-                  "Luaex_Reslist ResourceName LuaScript"
-                  "(`@PATH --LuaScript handle Script FilePath', `lua handle script content')"
-				  "constructor and destructor function must be exist in LuaScript"
-				  "min, smax, hmax are option value, default is 0, 16, 16"),
+  AP_INIT_TAKE2("Luaex_Reslist", luaex_cmd_Reslist, NULL, OR_ALL,
+  "Luaex Resource List management"
+  "Luaex_Reslist ResourceName LuaScript"
+  "(`@PATH --LuaScript handle Script FilePath', `lua handle script content')"
+  "constructor and destructor function must be exist in LuaScript"
+  "min, smax, hmax are option value, default is 0, 16, 16"),
 #endif
-    AP_INIT_TAKE2("Luaex_Handle", ml_set_server_handle, NULL, OR_ALL,
-                  "Set server handle file and function"),
-	AP_INIT_TAKE23("Luaex_MethodHandle", ml_set_method_handle, NULL,
-				  OR_ALL,
-				  "Provide a hook for the post_config function for luaex module"),
-    { NULL }
+  AP_INIT_TAKE2("Luaex_Handle", ml_set_server_handle, NULL, OR_ALL,
+  "Set server handle file and function"),
+  AP_INIT_TAKE23("Luaex_MethodHandle", ml_set_method_handle, NULL,
+  OR_ALL,
+  "Provide a hook for the post_config function for luaex module"),
+  { NULL }
 };
 
 
 void ml_filter_init_context(ap_filter_t *f)
 {
-    request_rec *r = f->r;
-    struct filter_ctx *ctx = f->ctx;
-    apr_bucket_alloc_t *ba = r->connection->bucket_alloc;
-    const char *cl_header;
+  request_rec *r = f->r;
+  struct filter_ctx *ctx = f->ctx;
+  apr_bucket_alloc_t *ba = r->connection->bucket_alloc;
+  const char *cl_header;
 
-    if (r->method_number == M_GET) {
-        /* Don't parse GET (this protects against subrequest body parsing). */
-        ctx->body_status = APREQ_ERROR_NODATA;
+  if (r->method_number == M_GET)
+  {
+    /* Don't parse GET (this protects against subrequest body parsing). */
+    ctx->body_status = APREQ_ERROR_NODATA;
+    return;
+  }
+
+  cl_header = apr_table_get(r->headers_in, "Content-Length");
+
+  if (cl_header != NULL)
+  {
+    char *dummy;
+    apr_uint64_t content_length = apr_strtoi64(cl_header, &dummy, 0);
+
+    if (dummy == NULL || *dummy != 0)
+    {
+      ap_log_rerror(APLOG_MARK, APLOG_ERR, APR_EGENERAL, r,
+                    "Invalid Content-Length header (%s)", cl_header);
+      ctx->body_status = APREQ_ERROR_BADHEADER;
+      return;
+    }
+    else if (content_length > ctx->read_limit)
+    {
+      ap_log_rerror(APLOG_MARK, APLOG_ERR, APR_EGENERAL, r,
+                    "Content-Length header (%s) exceeds configured "
+                    "max_body limit (%" APR_UINT64_T_FMT ")",
+                    cl_header, ctx->read_limit);
+      ctx->body_status = APREQ_ERROR_OVERLIMIT;
+      return;
+    }
+  }
+
+  if (ctx->parser == NULL)
+  {
+    const char *ct_header = apr_table_get(r->headers_in, "Content-Type");
+
+    if (ct_header != NULL)
+    {
+      apreq_parser_function_t pf = apreq_parser(ct_header);
+
+      if (pf != NULL)
+      {
+        ctx->parser = apreq_parser_make(r->pool, ba, ct_header, pf,
+                                        ctx->brigade_limit,
+                                        ctx->temp_dir,
+                                        ctx->hook_queue,
+                                        NULL);
+      }
+      else
+      {
+        ctx->body_status = APREQ_ERROR_NOPARSER;
         return;
+      }
     }
-
-    cl_header = apr_table_get(r->headers_in, "Content-Length");
-
-    if (cl_header != NULL) {
-        char *dummy;
-        apr_uint64_t content_length = apr_strtoi64(cl_header,&dummy,0);
-
-        if (dummy == NULL || *dummy != 0) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, APR_EGENERAL, r,
-                          "Invalid Content-Length header (%s)", cl_header);
-            ctx->body_status = APREQ_ERROR_BADHEADER;
-            return;
-        }
-        else if (content_length > ctx->read_limit) {
-            ap_log_rerror(APLOG_MARK, APLOG_ERR, APR_EGENERAL, r,
-                          "Content-Length header (%s) exceeds configured "
-                          "max_body limit (%" APR_UINT64_T_FMT ")",
-                          cl_header, ctx->read_limit);
-            ctx->body_status = APREQ_ERROR_OVERLIMIT;
-            return;
-        }
+    else
+    {
+      ctx->body_status = APREQ_ERROR_NOHEADER;
+      return;
     }
+  }
+  else
+  {
+    if (ctx->parser->brigade_limit > ctx->brigade_limit)
+      ctx->parser->brigade_limit = ctx->brigade_limit;
+    if (ctx->temp_dir != NULL)
+      ctx->parser->temp_dir = ctx->temp_dir;
+    if (ctx->hook_queue != NULL)
+      apreq_parser_add_hook(ctx->parser, ctx->hook_queue);
+  }
 
-    if (ctx->parser == NULL) {
-        const char *ct_header = apr_table_get(r->headers_in, "Content-Type");
-
-        if (ct_header != NULL) {
-            apreq_parser_function_t pf = apreq_parser(ct_header);
-
-            if (pf != NULL) {
-                ctx->parser = apreq_parser_make(r->pool, ba, ct_header, pf,
-                                                ctx->brigade_limit,
-                                                ctx->temp_dir,
-                                                ctx->hook_queue,
-                                                NULL);
-            }
-            else {
-                ctx->body_status = APREQ_ERROR_NOPARSER;
-                return;
-            }
-        }
-        else {
-            ctx->body_status = APREQ_ERROR_NOHEADER;
-            return;
-        }
-    }
-    else {
-        if (ctx->parser->brigade_limit > ctx->brigade_limit)
-            ctx->parser->brigade_limit = ctx->brigade_limit;
-        if (ctx->temp_dir != NULL)
-            ctx->parser->temp_dir = ctx->temp_dir;
-        if (ctx->hook_queue != NULL)
-            apreq_parser_add_hook(ctx->parser, ctx->hook_queue);
-    }
-
-    ctx->hook_queue = NULL;
-    ctx->bb    = apr_brigade_create(r->pool, ba);
-    ctx->bbtmp = apr_brigade_create(r->pool, ba);
-    ctx->spool = apr_brigade_create(r->pool, ba);
-    ctx->body  = apr_table_make(r->pool, APREQ_DEFAULT_NELTS);
-    ctx->body_status = APR_INCOMPLETE;
+  ctx->hook_queue = NULL;
+  ctx->bb    = apr_brigade_create(r->pool, ba);
+  ctx->bbtmp = apr_brigade_create(r->pool, ba);
+  ctx->spool = apr_brigade_create(r->pool, ba);
+  ctx->body  = apr_table_make(r->pool, APREQ_DEFAULT_NELTS);
+  ctx->body_status = APR_INCOMPLETE;
 }
 
 
@@ -293,387 +306,420 @@ void ml_filter_init_context(ap_filter_t *f)
 
 static apr_status_t apreq_filter_init(ap_filter_t *f)
 {
-    request_rec *r = f->r;
-    struct filter_ctx *ctx = f->ctx;
-    struct apache2_handle *handle =
-        (struct apache2_handle *)apreq_handle_apache2(r);
+  request_rec *r = f->r;
+  struct filter_ctx *ctx = f->ctx;
+  struct apache2_handle *handle =
+    (struct apache2_handle *)apreq_handle_apache2(r);
 
-    /* Don't parse GET (this protects against subrequest body parsing). */
-    if (f->r->method_number == M_GET)
-        return APR_SUCCESS;
+  /* Don't parse GET (this protects against subrequest body parsing). */
+  if (f->r->method_number == M_GET)
+    return APR_SUCCESS;
 
-    if (ctx == NULL || ctx->body_status == APR_EINIT) {
-        if (f == r->input_filters) {
-            handle->f = f;
-        }
-        else if (r->input_filters->frec->filter_func.in_func == ml_filter) {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
-                          "removing intermediate apreq filter");
-            if (handle->f == f)
-                handle->f = r->input_filters;
-            ap_remove_input_filter(f);
-        }
-        else {
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
-                          "relocating intermediate apreq filter");
-            ml_filter_relocate(f);
-            handle->f = f;
-        }
-        return APR_SUCCESS;
+  if (ctx == NULL || ctx->body_status == APR_EINIT)
+  {
+    if (f == r->input_filters)
+    {
+      handle->f = f;
     }
-
-    /* else this is a protocol filter which may still be active.
-     * if it is, we must deregister it now.
-     */
-    if (handle->f == f) {
-        ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
-                     "disabling stale protocol filter");
-        if (ctx->body_status == APR_INCOMPLETE)
-            ctx->body_status = APREQ_ERROR_INTERRUPT;
-        handle->f = NULL;
+    else if (r->input_filters->frec->filter_func.in_func == ml_filter)
+    {
+      ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
+                    "removing intermediate apreq filter");
+      if (handle->f == f)
+        handle->f = r->input_filters;
+      ap_remove_input_filter(f);
+    }
+    else
+    {
+      ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
+                    "relocating intermediate apreq filter");
+      ml_filter_relocate(f);
+      handle->f = f;
     }
     return APR_SUCCESS;
+  }
+
+  /* else this is a protocol filter which may still be active.
+   * if it is, we must deregister it now.
+   */
+  if (handle->f == f)
+  {
+    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
+                  "disabling stale protocol filter");
+    if (ctx->body_status == APR_INCOMPLETE)
+      ctx->body_status = APREQ_ERROR_INTERRUPT;
+    handle->f = NULL;
+  }
+  return APR_SUCCESS;
 }
 
 
 
 apr_status_t ml_filter_prefetch(ap_filter_t *f, apr_off_t readbytes)
 {
-    struct filter_ctx *ctx = f->ctx;
-    request_rec *r = f->r;
-    apr_status_t rv;
-    apr_off_t len;
+  struct filter_ctx *ctx = f->ctx;
+  request_rec *r = f->r;
+  apr_status_t rv;
+  apr_off_t len;
 
-    if (ctx->body_status == APR_EINIT)
-        ml_filter_init_context(f);
+  if (ctx->body_status == APR_EINIT)
+    ml_filter_init_context(f);
 
-    if (ctx->body_status != APR_INCOMPLETE || readbytes == 0)
-        return ctx->body_status;
-
-    ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
-                  "prefetching %" APR_OFF_T_FMT " bytes", readbytes);
-
-    rv = ap_get_brigade(f->next, ctx->bb, AP_MODE_READBYTES,
-                       APR_BLOCK_READ, readbytes);
-
-    if (rv != APR_SUCCESS) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
-                      "ap_get_brigade failed during prefetch");
-        ctx->filter_error = rv;
-        return ctx->body_status = APREQ_ERROR_GENERAL;
-    }
-
-    apreq_brigade_setaside(ctx->bb, r->pool);
-    apreq_brigade_copy(ctx->bbtmp, ctx->bb);
-
-    rv = apreq_brigade_concat(r->pool, ctx->temp_dir, ctx->brigade_limit,
-                              ctx->spool, ctx->bbtmp);
-    if (rv != APR_SUCCESS && rv != APR_EOF) {
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
-                      "apreq_brigade_concat failed; TempDir problem?");
-        ctx->filter_error = APR_EGENERAL;
-        return ctx->body_status = rv;
-    }
-
-    /* Adding "f" to the protocol filter chain ensures the
-     * spooled data is preserved across internal redirects.
-     */
-
-    if (f != r->proto_input_filters) {
-        ap_filter_t *in;
-        for (in = r->input_filters; in != r->proto_input_filters;
-             in = in->next)
-        {
-            if (f == in) {
-                r->proto_input_filters = f;
-                break;
-            }
-        }
-    }
-
-    apr_brigade_length(ctx->bb, 1, &len);
-    ctx->bytes_read += len;
-
-    if (ctx->bytes_read > ctx->read_limit) {
-        ctx->body_status = APREQ_ERROR_OVERLIMIT;
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, ctx->body_status, r,
-                      "Bytes read (%" APR_UINT64_T_FMT
-                      ") exceeds configured read limit (%" APR_UINT64_T_FMT ")",
-                      ctx->bytes_read, ctx->read_limit);
-        return ctx->body_status;
-    }
-
-    ctx->body_status = apreq_parser_run(ctx->parser, ctx->body, ctx->bb);
-    apr_brigade_cleanup(ctx->bb);
-
+  if (ctx->body_status != APR_INCOMPLETE || readbytes == 0)
     return ctx->body_status;
+
+  ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
+                "prefetching %" APR_OFF_T_FMT " bytes", readbytes);
+
+  rv = ap_get_brigade(f->next, ctx->bb, AP_MODE_READBYTES,
+                      APR_BLOCK_READ, readbytes);
+
+  if (rv != APR_SUCCESS)
+  {
+    ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+                  "ap_get_brigade failed during prefetch");
+    ctx->filter_error = rv;
+    return ctx->body_status = APREQ_ERROR_GENERAL;
+  }
+
+  apreq_brigade_setaside(ctx->bb, r->pool);
+  apreq_brigade_copy(ctx->bbtmp, ctx->bb);
+
+  rv = apreq_brigade_concat(r->pool, ctx->temp_dir, ctx->brigade_limit,
+                            ctx->spool, ctx->bbtmp);
+  if (rv != APR_SUCCESS && rv != APR_EOF)
+  {
+    ap_log_rerror(APLOG_MARK, APLOG_ERR, rv, r,
+                  "apreq_brigade_concat failed; TempDir problem?");
+    ctx->filter_error = APR_EGENERAL;
+    return ctx->body_status = rv;
+  }
+
+  /* Adding "f" to the protocol filter chain ensures the
+   * spooled data is preserved across internal redirects.
+   */
+
+  if (f != r->proto_input_filters)
+  {
+    ap_filter_t *in;
+    for (in = r->input_filters; in != r->proto_input_filters;
+         in = in->next)
+    {
+      if (f == in)
+      {
+        r->proto_input_filters = f;
+        break;
+      }
+    }
+  }
+
+  apr_brigade_length(ctx->bb, 1, &len);
+  ctx->bytes_read += len;
+
+  if (ctx->bytes_read > ctx->read_limit)
+  {
+    ctx->body_status = APREQ_ERROR_OVERLIMIT;
+    ap_log_rerror(APLOG_MARK, APLOG_ERR, ctx->body_status, r,
+                  "Bytes read (%" APR_UINT64_T_FMT
+                  ") exceeds configured read limit (%" APR_UINT64_T_FMT ")",
+                  ctx->bytes_read, ctx->read_limit);
+    return ctx->body_status;
+  }
+
+  ctx->body_status = apreq_parser_run(ctx->parser, ctx->body, ctx->bb);
+  apr_brigade_cleanup(ctx->bb);
+
+  return ctx->body_status;
 }
 
 
 
 apr_status_t ml_filter(ap_filter_t *f,
-                          apr_bucket_brigade *bb,
-                          ap_input_mode_t mode,
-                          apr_read_type_e block,
-                          apr_off_t readbytes)
+                       apr_bucket_brigade *bb,
+                       ap_input_mode_t mode,
+                       apr_read_type_e block,
+                       apr_off_t readbytes)
 {
-    request_rec *r = f->r;
-    struct filter_ctx *ctx;
-    apr_status_t rv;
-    apr_off_t len;
+  request_rec *r = f->r;
+  struct filter_ctx *ctx;
+  apr_status_t rv;
+  apr_off_t len;
 
-    switch (mode) {
-    case AP_MODE_READBYTES:
-        /* only the modes above are supported */
-        break;
+  switch (mode)
+  {
+  case AP_MODE_READBYTES:
+    /* only the modes above are supported */
+    break;
 
-    case AP_MODE_EXHAUSTIVE: /* not worth supporting at this level */
-    case AP_MODE_GETLINE: /* chunked trailers are b0rked in ap_http_filter */
-        return ap_get_brigade(f->next, bb, mode, block, readbytes);
+  case AP_MODE_EXHAUSTIVE: /* not worth supporting at this level */
+  case AP_MODE_GETLINE: /* chunked trailers are b0rked in ap_http_filter */
+    return ap_get_brigade(f->next, bb, mode, block, readbytes);
 
-    default:
-        return APR_ENOTIMPL;
-    }
+  default:
+    return APR_ENOTIMPL;
+  }
 
-    if (f->ctx == NULL)
-        ml_filter_make_context(f);
+  if (f->ctx == NULL)
+    ml_filter_make_context(f);
 
-    ctx = f->ctx;
+  ctx = f->ctx;
 
-    if (ctx->body_status == APR_EINIT)
-        ml_filter_init_context(f);
+  if (ctx->body_status == APR_EINIT)
+    ml_filter_init_context(f);
 
-    if (ctx->spool && !APR_BRIGADE_EMPTY(ctx->spool)) {
-        apr_bucket *e;
-        rv = apr_brigade_partition(ctx->spool, readbytes, &e);
-        if (rv != APR_SUCCESS && rv != APR_INCOMPLETE)
-            return rv;
+  if (ctx->spool && !APR_BRIGADE_EMPTY(ctx->spool))
+  {
+    apr_bucket *e;
+    rv = apr_brigade_partition(ctx->spool, readbytes, &e);
+    if (rv != APR_SUCCESS && rv != APR_INCOMPLETE)
+      return rv;
 
-        if (APR_BUCKET_IS_EOS(e))
-            e = APR_BUCKET_NEXT(e);
+    if (APR_BUCKET_IS_EOS(e))
+      e = APR_BUCKET_NEXT(e);
 
-        apreq_brigade_move(bb, ctx->spool, e);
-        return APR_SUCCESS;
-    }
-    else if (ctx->body_status != APR_INCOMPLETE) {
-        if (ctx->filter_error)
-            return ctx->filter_error;
-
-        rv = ap_get_brigade(f->next, bb, mode, block, readbytes);
-        ap_remove_input_filter(f);
-        return rv;
-    }
-
+    apreq_brigade_move(bb, ctx->spool, e);
+    return APR_SUCCESS;
+  }
+  else if (ctx->body_status != APR_INCOMPLETE)
+  {
+    if (ctx->filter_error)
+      return ctx->filter_error;
 
     rv = ap_get_brigade(f->next, bb, mode, block, readbytes);
-    if (rv != APR_SUCCESS)
-        return rv;
+    ap_remove_input_filter(f);
+    return rv;
+  }
 
-    apreq_brigade_copy(ctx->bb, bb);
-    apr_brigade_length(bb, 1, &len);
-    ctx->bytes_read += len;
 
-    if (ctx->bytes_read > ctx->read_limit) {
-        ctx->body_status = APREQ_ERROR_OVERLIMIT;
-        ap_log_rerror(APLOG_MARK, APLOG_ERR, ctx->body_status, r,
-                      "Bytes read (%" APR_UINT64_T_FMT
-                      ") exceeds configured max_body limit (%"
-                      APR_UINT64_T_FMT ")",
-                      ctx->bytes_read, ctx->read_limit);
-    }
-    else {
-        ctx->body_status = apreq_parser_run(ctx->parser, ctx->body, ctx->bb);
-        apr_brigade_cleanup(ctx->bb);
-    }
-    return APR_SUCCESS;
+  rv = ap_get_brigade(f->next, bb, mode, block, readbytes);
+  if (rv != APR_SUCCESS)
+    return rv;
+
+  apreq_brigade_copy(ctx->bb, bb);
+  apr_brigade_length(bb, 1, &len);
+  ctx->bytes_read += len;
+
+  if (ctx->bytes_read > ctx->read_limit)
+  {
+    ctx->body_status = APREQ_ERROR_OVERLIMIT;
+    ap_log_rerror(APLOG_MARK, APLOG_ERR, ctx->body_status, r,
+                  "Bytes read (%" APR_UINT64_T_FMT
+                  ") exceeds configured max_body limit (%"
+                  APR_UINT64_T_FMT ")",
+                  ctx->bytes_read, ctx->read_limit);
+  }
+  else
+  {
+    ctx->body_status = apreq_parser_run(ctx->parser, ctx->body, ctx->bb);
+    apr_brigade_cleanup(ctx->bb);
+  }
+  return APR_SUCCESS;
 }
 
 
 static int apreq_pre_init(apr_pool_t *p, apr_pool_t *plog,
                           apr_pool_t *ptemp, server_rec *base_server)
 {
-    apr_status_t status;
+  apr_status_t status;
 
-    status = apreq_pre_initialize(p);
-    if (status != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_STARTUP|APLOG_ERR, status, base_server,
-                     "Failed to pre-initialize libapreq2");
-        return HTTP_INTERNAL_SERVER_ERROR;
-    }
-    APR_REGISTER_OPTIONAL_FN(apreq_handle_apache2);
-    return OK;
+  status = apreq_pre_initialize(p);
+  if (status != APR_SUCCESS)
+  {
+    ap_log_error(APLOG_MARK, APLOG_STARTUP | APLOG_ERR, status, base_server,
+                 "Failed to pre-initialize libapreq2");
+    return HTTP_INTERNAL_SERVER_ERROR;
+  }
+  APR_REGISTER_OPTIONAL_FN(apreq_handle_apache2);
+  return OK;
 }
 
 static int apreq_post_init(apr_pool_t *p, apr_pool_t *plog,
                            apr_pool_t *ptemp, server_rec *s)
 {
-    apr_status_t status;
-	module *mime_module = ap_find_linked_module("mod_mime.c");
-	if (mime_module){
-		ap_configfile_t *f;
-		apr_hash_t* mime_type_extensions = NULL;
-		char l[MAX_STRING_LEN];
-		const char *types_confname = ap_get_module_config(s->module_config,
-			mime_module);
+  apr_status_t status;
+  module *mime_module = ap_find_linked_module("mod_mime.c");
+  if (mime_module)
+  {
+    ap_configfile_t *f;
+    apr_hash_t* mime_type_extensions = NULL;
+    char l[MAX_STRING_LEN];
+    const char *types_confname = ap_get_module_config(s->module_config,
+                                 mime_module);
 
-		if (!types_confname) {
-			types_confname = AP_TYPES_CONFIG_FILE;
-		}
-
-		types_confname = ap_server_root_relative(p, types_confname);
-		if (!types_confname) {
-			ap_log_error(APLOG_MARK, APLOG_ERR, APR_EBADPATH, s, APLOGNO(01596)
-				"Invalid mime types config path %s",
-				(const char *)ap_get_module_config(s->module_config,
-				mime_module));
-			return HTTP_INTERNAL_SERVER_ERROR;
-		}
-		if ((status = ap_pcfg_openfile(&f, ptemp, types_confname))
-			!= APR_SUCCESS) {
-				ap_log_error(APLOG_MARK, APLOG_ERR, status, s, APLOGNO(01597)
-					"could not open mime types config file %s.",
-					types_confname);
-				return HTTP_INTERNAL_SERVER_ERROR;
-		}
-
-		mime_type_extensions = apr_hash_make(p);
-
-		while (!(ap_cfg_getline(l, MAX_STRING_LEN, f))) {
-			const char *ll = l, *ct;
-
-			if (l[0] == '#') {
-				continue;
-			}
-			ct = ap_getword_conf(p, &ll);
-
-			while (ll[0]) {
-				char *ext = ap_getword_conf(p, &ll);
-				ap_str_tolower(ext);
-				apr_hash_set(mime_type_extensions, ext, APR_HASH_KEY_STRING, ct);
-			}
-		}
-		ap_cfg_closefile(f);
-		apr_pool_userdata_set(mime_type_extensions, "mod_luaex",NULL, s->process->pool);
-	}
-    ap_add_version_component(p, apr_psprintf(p, "mod_luaex-1.0"));
-
-    status = apreq_post_initialize(p);
-    if (status != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_STARTUP|APLOG_ERR, status, s,
-                     "Failed to post-initialize libapreq2");
-        return HTTP_INTERNAL_SERVER_ERROR;
+    if (!types_confname)
+    {
+      types_confname = AP_TYPES_CONFIG_FILE;
     }
-    return OK;
+
+    types_confname = ap_server_root_relative(p, types_confname);
+    if (!types_confname)
+    {
+      ap_log_error(APLOG_MARK, APLOG_ERR, APR_EBADPATH, s, APLOGNO(01596)
+                   "Invalid mime types config path %s",
+                   (const char *)ap_get_module_config(s->module_config,
+                       mime_module));
+      return HTTP_INTERNAL_SERVER_ERROR;
+    }
+    if ((status = ap_pcfg_openfile(&f, ptemp, types_confname))
+        != APR_SUCCESS)
+    {
+      ap_log_error(APLOG_MARK, APLOG_ERR, status, s, APLOGNO(01597)
+                   "could not open mime types config file %s.",
+                   types_confname);
+      return HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    mime_type_extensions = apr_hash_make(p);
+
+    while (!(ap_cfg_getline(l, MAX_STRING_LEN, f)))
+    {
+      const char *ll = l, *ct;
+
+      if (l[0] == '#')
+      {
+        continue;
+      }
+      ct = ap_getword_conf(p, &ll);
+
+      while (ll[0])
+      {
+        char *ext = ap_getword_conf(p, &ll);
+        ap_str_tolower(ext);
+        apr_hash_set(mime_type_extensions, ext, APR_HASH_KEY_STRING, ct);
+      }
+    }
+    ap_cfg_closefile(f);
+    apr_pool_userdata_set(mime_type_extensions, "mod_luaex", NULL, s->process->pool);
+  }
+  ap_add_version_component(p, apr_psprintf(p, "mod_luaex-1.0"));
+
+  status = apreq_post_initialize(p);
+  if (status != APR_SUCCESS)
+  {
+    ap_log_error(APLOG_MARK, APLOG_STARTUP | APLOG_ERR, status, s,
+                 "Failed to post-initialize libapreq2");
+    return HTTP_INTERNAL_SERVER_ERROR;
+  }
+  return OK;
 }
 
-static int luaex_monitor(apr_pool_t *p, server_rec *s){
-	char date_str[APR_PATH_MAX];
-	apr_time_t now = apr_time_now();
-	apr_status_t rc = apr_rfc822_date(date_str,now);
-	if(rc==0){
-		printf("TICK: %s\n",date_str);
-	}
-	return 0;
+static int luaex_monitor(apr_pool_t *p, server_rec *s)
+{
+  char date_str[APR_PATH_MAX];
+  apr_time_t now = apr_time_now();
+  apr_status_t rc = apr_rfc822_date(date_str, now);
+  if (rc == 0)
+  {
+    printf("TICK: %s\n", date_str);
+  }
+  return 0;
 }
 
 static void register_hooks (apr_pool_t *p)
 {
-    /* APR_HOOK_FIRST because we want other modules to be able to
-     * register parsers in their post_config hook via APR_HOOK_MIDDLE.
-     */
-    ap_hook_post_config(apreq_pre_init, NULL, NULL, APR_HOOK_FIRST);
+  /* APR_HOOK_FIRST because we want other modules to be able to
+   * register parsers in their post_config hook via APR_HOOK_MIDDLE.
+   */
+  ap_hook_post_config(apreq_pre_init, NULL, NULL, APR_HOOK_FIRST);
 
-    /* APR_HOOK_LAST because we need to lock the default_parsers hash
-     * (to prevent further modifications) before the server forks.
-     */
-    ap_hook_post_config(apreq_post_init, NULL, NULL, APR_HOOK_LAST);
-    ap_hook_process_connection(ml_process_connection,NULL,NULL, APR_HOOK_MIDDLE);
-    ap_register_input_filter(MLE_FILTER_NAME, ml_filter, apreq_filter_init, AP_FTYPE_PROTOCOL-1);
+  /* APR_HOOK_LAST because we need to lock the default_parsers hash
+   * (to prevent further modifications) before the server forks.
+   */
+  ap_hook_post_config(apreq_post_init, NULL, NULL, APR_HOOK_LAST);
+  ap_hook_process_connection(ml_process_connection, NULL, NULL, APR_HOOK_MIDDLE);
+  ap_register_input_filter(MLE_FILTER_NAME, ml_filter, apreq_filter_init, AP_FTYPE_PROTOCOL - 1);
 
-	ap_hook_monitor(luaex_monitor, NULL, NULL, APR_HOOK_MIDDLE);
+  ap_hook_monitor(luaex_monitor, NULL, NULL, APR_HOOK_MIDDLE);
 
-    ml_register_hooks(p);
+  ml_register_hooks(p);
 }
 
 /** @} */
 
 
-module AP_MODULE_DECLARE_DATA luaex_module = {
+module AP_MODULE_DECLARE_DATA luaex_module =
+{
 #line __LINE__ "mod_luaex.c"
-	STANDARD20_MODULE_STUFF,
-	apreq_create_dir_config,
-	apreq_merge_dir_config,
-	ml_create_server,
-	NULL,
-	apreq_cmds,
-	register_hooks,
+  STANDARD20_MODULE_STUFF,
+  apreq_create_dir_config,
+  apreq_merge_dir_config,
+  ml_create_server,
+  NULL,
+  apreq_cmds,
+  register_hooks,
 };
 
 
 void ml_filter_make_context(ap_filter_t *f)
 {
-    request_rec *r;
-    struct filter_ctx *ctx;
-    struct dir_config *d;
+  request_rec *r;
+  struct filter_ctx *ctx;
+  struct dir_config *d;
 
-    r = f->r;
-    d = ap_get_module_config(r->per_dir_config, &luaex_module);
+  r = f->r;
+  d = ap_get_module_config(r->per_dir_config, &luaex_module);
 
-    if (f == r->input_filters
-        && r->proto_input_filters == f->next
-        && f->next->frec->filter_func.in_func == ml_filter
-        && f->r->method_number != M_GET)
+  if (f == r->input_filters
+      && r->proto_input_filters == f->next
+      && f->next->frec->filter_func.in_func == ml_filter
+      && f->r->method_number != M_GET)
+  {
+
+    ctx = f->next->ctx;
+
+    switch (ctx->body_status)
     {
 
-        ctx = f->next->ctx;
+    case APREQ_ERROR_INTERRUPT:
+      ctx->body_status = APR_INCOMPLETE;
+    /* fall thru */
 
-        switch (ctx->body_status) {
+    case APR_SUCCESS:
 
-        case APREQ_ERROR_INTERRUPT:
-            ctx->body_status = APR_INCOMPLETE;
-            /* fall thru */
-
-        case APR_SUCCESS:
-
-            if (d != NULL) {
-                ctx->temp_dir      = d->temp_dir;
-                ctx->read_limit    = d->read_limit;
-                ctx->brigade_limit = d->brigade_limit;
-
-                if (ctx->parser != NULL) {
-                    ctx->parser->temp_dir = d->temp_dir;
-                    ctx->parser->brigade_limit = d->brigade_limit;
-                }
-
-            }
-
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
-                          "stealing filter context");
-            f->ctx = ctx;
-            r->proto_input_filters = f;
-            ap_remove_input_filter(f->next);
-
-            return;
-
-        default:
-            ap_log_rerror(APLOG_MARK, APLOG_DEBUG, ctx->body_status, r,
-                          "cannot steal context: bad filter status");
-        }
-    }
-
-    ctx = apr_pcalloc(r->pool, sizeof *ctx);
-    ctx->body_status = APR_EINIT;
-
-    if (d == NULL) {
-        ctx->read_limit    = (apr_uint64_t)-1;
-        ctx->brigade_limit = APREQ_DEFAULT_BRIGADE_LIMIT;
-    } else {
+      if (d != NULL)
+      {
         ctx->temp_dir      = d->temp_dir;
-        ctx->read_limit    = (d->read_limit == (apr_uint64_t)-1)
-            ? APREQ_DEFAULT_READ_LIMIT : d->read_limit;
-        ctx->brigade_limit = (d->brigade_limit == (apr_size_t)-1)
-            ? APREQ_DEFAULT_BRIGADE_LIMIT : d->brigade_limit;
-    }
+        ctx->read_limit    = d->read_limit;
+        ctx->brigade_limit = d->brigade_limit;
 
-    f->ctx = ctx;
+        if (ctx->parser != NULL)
+        {
+          ctx->parser->temp_dir = d->temp_dir;
+          ctx->parser->brigade_limit = d->brigade_limit;
+        }
+
+      }
+
+      ap_log_rerror(APLOG_MARK, APLOG_DEBUG, APR_SUCCESS, r,
+                    "stealing filter context");
+      f->ctx = ctx;
+      r->proto_input_filters = f;
+      ap_remove_input_filter(f->next);
+
+      return;
+
+    default:
+      ap_log_rerror(APLOG_MARK, APLOG_DEBUG, ctx->body_status, r,
+                    "cannot steal context: bad filter status");
+    }
+  }
+
+  ctx = apr_pcalloc(r->pool, sizeof * ctx);
+  ctx->body_status = APR_EINIT;
+
+  if (d == NULL)
+  {
+    ctx->read_limit    = (apr_uint64_t) - 1;
+    ctx->brigade_limit = APREQ_DEFAULT_BRIGADE_LIMIT;
+  }
+  else
+  {
+    ctx->temp_dir      = d->temp_dir;
+    ctx->read_limit    = (d->read_limit == (apr_uint64_t) - 1)
+                         ? APREQ_DEFAULT_READ_LIMIT : d->read_limit;
+    ctx->brigade_limit = (d->brigade_limit == (apr_size_t) - 1)
+                         ? APREQ_DEFAULT_BRIGADE_LIMIT : d->brigade_limit;
+  }
+
+  f->ctx = ctx;
 }
