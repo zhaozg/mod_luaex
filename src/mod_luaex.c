@@ -1,6 +1,7 @@
 #include "mod_luaex.h"
 
 #include "mod_dbd.h"
+#include "mod_proxy.h"
 #include <mod_so.h>
 #include <lua_apr.h>
 
@@ -551,5 +552,6 @@ apr_status_t ml_register_hooks (apr_pool_t *p){
 	ml_retrieve_option_functions (p);
 	APR_OPTIONAL_HOOK(ap_lua, lua_request,  ml_lua_request, NULL,NULL,APR_HOOK_MIDDLE);
 	APR_OPTIONAL_HOOK(ap_lua, lua_open,     ml_lua_open,    NULL,NULL,APR_HOOK_MIDDLE);
+
 	return 0;
 }

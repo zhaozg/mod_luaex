@@ -186,6 +186,9 @@ static const command_rec apreq_cmds[] =
 #endif
     AP_INIT_TAKE2("Luaex_Handle", ml_set_server_handle, NULL, OR_ALL,
                   "Set server handle file and function"),
+	AP_INIT_TAKE23("Luaex_MethodHandle", ml_set_method_handle, NULL,
+				  OR_ALL,
+				  "Provide a hook for the post_config function for luaex module"),
     { NULL }
 };
 
@@ -572,6 +575,7 @@ static int luaex_monitor(apr_pool_t *p, server_rec *s){
 	}
 	return 0;
 }
+
 static void register_hooks (apr_pool_t *p)
 {
     /* APR_HOOK_FIRST because we want other modules to be able to

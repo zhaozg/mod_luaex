@@ -1,5 +1,7 @@
 #include "mod_luaex.h"
 #include "mod_lua.h"
+#include <apr_buckets.h>
+
 APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module = NULL;
 
 /************************************************************************/
@@ -321,7 +323,7 @@ static int req_add_cgi_vars (lua_State *L) {
 	{
 		lua_pushstring(L, apr_table_get(r->subprocess_env, lua_tostring(L,2)));
 	}else{
-		ap_lua_push_apr_table(L, r->subprocess_env);
+		ml_push_apr_table(L, r->subprocess_env,r,"subprocess_env",NULL);
 	}
 	return 1;
 }
@@ -450,6 +452,92 @@ static int req_discard_request_body (lua_State *L) {
 
 	lua_pushnumber (L, ap_discard_request_body (r));
 	return 1;
+}
+
+
+static apr_bucket_brigade* get_bb(request_rec* r){
+	apr_bucket_brigade *bb=NULL;
+	int s = apr_pool_userdata_get((void**)&bb,"bb",r->pool);
+	if(s==0){
+		if(bb==NULL){
+			bb = apr_brigade_create(r->pool, r->connection->bucket_alloc);
+			apr_pool_userdata_set(bb,"bb",NULL,r->pool);
+		}
+	}
+	return bb;
+}
+
+
+static int lua_ap_recv(lua_State *L){
+	request_rec *r = CHECK_REQUEST_OBJECT(1);
+	int type = lua_type(L, 2);
+	apr_off_t bytes = LUAL_BUFFERSIZE;
+	int s = 0;
+
+	if(type==LUA_TNUMBER || type==LUA_TNIL || type==LUA_TNONE){
+		int n = 0;
+
+		apr_bucket_brigade *bb=get_bb(r);
+		bytes = luaL_optint(L, 2, (lua_Integer)bytes);
+		s = ap_get_brigade(r->input_filters, bb, AP_MODE_READBYTES,APR_BLOCK_READ,bytes);
+
+		if(s==0){
+			apr_bucket *e;
+			for (e = APR_BRIGADE_FIRST(bb); s==0 && e != APR_BRIGADE_SENTINEL(bb); e = APR_BUCKET_NEXT(e))
+			{
+				if (!APR_BUCKET_IS_EOS(e)){
+					apr_size_t blen;
+					const char* buf;
+					s = apr_bucket_read(e, &buf, &blen, APR_BLOCK_READ);
+					if(s==0){
+						lua_pushlstring(L, buf, blen);
+						n++;
+					}
+				}
+			}
+		}
+		if(n>0)
+			lua_concat(L,n);
+		else
+			lua_pushnil(L);
+		apr_brigade_cleanup(bb);
+	}else if(type==LUA_TSTRING){
+		const char* want = lua_tostring(L,2);
+		if(strcasecmp(want,"*l"))
+		{
+			apr_bucket_brigade *bb=get_bb(r);
+			luaL_Buffer buf;
+			apr_size_t n;
+
+			luaL_buffinit(L,&buf);
+			s = ap_rgetline(&buf.p,LUAL_BUFFERSIZE,&n,r,0,bb);
+			if(s==0){
+				lua_pushlstring(L,buf.buffer,n);
+			}else
+				lua_pushnil(L);
+			apr_brigade_cleanup(bb);
+		}else{
+			luaL_error(L,"#2 only support number or '*'");
+		}
+	}
+
+	return 1;
+
+}
+
+static int lua_ap_send(lua_State *L){
+	request_rec *r = CHECK_REQUEST_OBJECT(1);
+	size_t len;
+	const char* dat = luaL_checklstring(L,2,&len);
+	int flush = lua_isnone(L,3)?1:lua_toboolean(L, 3);
+	int s = ap_rwrite(dat,len,r);
+	if(s==len){
+		s = flush?ap_rflush(r):0;
+	}
+
+	lua_pushboolean(L,s==0);
+	lua_pushinteger(L,s);
+	return 2;
 }
 
 /* FIXME: zhaozg */
@@ -608,6 +696,7 @@ static int req_mime_types(lua_State *L) {
 	return 1;
 }
 
+
 req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool)
 {
 	req_fun_t *rft = apr_palloc(pool, sizeof(req_fun_t));
@@ -661,7 +750,10 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p) {
 	apr_hash_set(dispatch, "set_last_modified", APR_HASH_KEY_STRING, ml_makefun(&req_set_last_modified, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "update_mtime", APR_HASH_KEY_STRING, ml_makefun(&req_update_mtime, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "mime_types", APR_HASH_KEY_STRING, ml_makefun(&req_mime_types, APL_REQ_FUNTYPE_LUACFUN, p));
-	
+
+	apr_hash_set(dispatch, "recv", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_recv, APL_REQ_FUNTYPE_LUACFUN, p));
+	apr_hash_set(dispatch, "send", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_send, APL_REQ_FUNTYPE_LUACFUN, p));
+
 	apr_hash_set(dispatch, "read", APR_HASH_KEY_STRING, ml_makefun(&req_read, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "rflush", APR_HASH_KEY_STRING, ml_makefun(&req_rflush, APL_REQ_FUNTYPE_LUACFUN, p));
 	apr_hash_set(dispatch, "get_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_get_client_block, APL_REQ_FUNTYPE_LUACFUN, p));

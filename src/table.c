@@ -56,7 +56,7 @@ static int table_overlay(lua_State*L)
     apr_table_t *t = apr_table_copy(apr_table_elts(t1)->pool,t1);
 
     t = apr_table_overlay(apr_table_elts(t)->pool, t, t2);
-    ap_lua_push_apr_table(L,t);
+    ml_push_apr_table(L,t,NULL,"overlay",apr_table_elts(t1)->pool);
     return 1;
 }
 

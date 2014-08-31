@@ -225,7 +225,7 @@ extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 #define CHECK_REQUEST_OBJECT(x)  ml_check_object(L, x,"Apache2.Request")
 #define CHECK_CONNECTION_OBJECT(x)  ml_check_object(L, x,"Apache2.Connection")
 #define CHECK_SERVER_OBJECT(x)  ml_check_object(L, x,"Apache2.Server")
-#define CHECK_APRTABLE_OBJECT(x)  ap_lua_check_apr_table(L, x)
+#define CHECK_APRTABLE_OBJECT(x)  ml_check_apr_table(L, x)
 
 #define CHECK_SESSION_OBJECT(x) ml_check_object(L, x, "mod_luaex.session")
 #define CHECK_SOCACHE_OBJECT(x) ((ml_socache*)luaL_checkudata(L, x, "mod_luaex.socache"))
@@ -245,8 +245,8 @@ extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 #define PUSH_COOKIE_OBJECT(x)   ml_push_object(L, x, "mod_luaex.cookie")
 #define PUSH_PARAM_OBJECT(x)    ml_push_object(L, x, "mod_luaex.param")
 
-AP_LUA_DECLARE(apr_table_t*) ap_lua_check_apr_table(lua_State *L, int index);
-AP_LUA_DECLARE(void) ap_lua_push_apr_table(lua_State *L, apr_table_t *t);
+apr_table_t* ml_check_apr_table(lua_State *L, int index);
+void ml_push_apr_table(lua_State *L, apr_table_t *t,request_rec* r,const char*name,apr_pool_t* pool);
 
 int ml_ext_apr_table(lua_State*L);
 int ml_luaopen_apreq(lua_State *L,apr_pool_t *p);

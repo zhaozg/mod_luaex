@@ -4,7 +4,8 @@
 #include <mod_session.h>
 #include <mod_ssl.h>
 #include <mod_dbd.h>
-
+#include "lua_request.h"
+#include "lua_apr.h"
 
 static APR_OPTIONAL_FN_TYPE(ap_session_get)  *ap_session_get = NULL;
 static APR_OPTIONAL_FN_TYPE(ap_session_set)  *ap_session_set = NULL;
@@ -51,6 +52,20 @@ module* ml_find_module(server_rec*s, const char*m) {
 		return ap_find_loaded_module_symbol(s, m);
 	}
 	return NULL;
+}
+
+apr_table_t* ml_check_apr_table(lua_State *L, int index){
+	req_table_t* t = ap_lua_check_apr_table(L, index);
+	if(t)
+		return t->t;
+	return NULL;
+}
+void ml_push_apr_table(lua_State *L, apr_table_t *ta, request_rec* r,const char*name,apr_pool_t* pool){
+	req_table_t* t = apr_pcalloc(r?r->pool:pool,sizeof(req_table_t));
+	t->t = ta;
+	t->r = r;
+	t->n = name;
+	ap_lua_push_apr_table(L,t);
 }
 
 /************************************************************************/

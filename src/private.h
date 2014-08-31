@@ -120,6 +120,11 @@ int ml_process_connection(conn_rec *c);
 const char *ml_set_server_handle(cmd_parms *cmd, void *_cfg,
     const char *name,
     const char *file);
+const char *ml_set_method_handle(cmd_parms *cmd, void *_cfg,
+	const char *name,
+	const char *file,
+	const char *funcname);
+
 int ml_call(lua_State *L, const char *func, const char *sig, ...) ;
 
 #ifdef __cplusplus

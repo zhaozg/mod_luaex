@@ -316,6 +316,14 @@ static int lua_ap_restarted_time(lua_State *L)
 	return 1;
 }
 
+static int lua_ap_method_register(lua_State *L)
+{
+	server_rec *s = (server_rec *)CHECK_SERVER_OBJECT(1);
+	const char* method = luaL_checkstring(L,2);
+	int m = ap_method_register(s->process->pool,method);
+	lua_pushinteger(L, m);
+	return 1;
+}
 
 /*** register apache2 apis ***/
 int ml_apache2_extends(lua_State*L)
@@ -350,6 +358,10 @@ int ml_apache2_extends(lua_State*L)
 
 	lua_pushcfunction (L, lua_ap_scoreboard_worker);
 	lua_setfield(L, -2, "scoreboard_worker");	
+
+	lua_pushcfunction (L, lua_ap_method_register);
+	lua_setfield(L, -2, "method_register");	
+	
 
 	ap_mpm_query(AP_MPMQ_HARD_LIMIT_THREADS, &limit);
 	lua_pushinteger(L, limit);

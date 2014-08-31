@@ -396,7 +396,7 @@ static int ap2req_cookie_make(lua_State*L) {
 
 			if(t!=NULL)
 			{
-				ap_lua_push_apr_table(L,t);
+				ml_push_apr_table(L,t,NULL,"cookies",h->pool);
 			}else
 			{
 				lua_pushnil(L);
@@ -409,7 +409,7 @@ static int ap2req_cookie_make(lua_State*L) {
 			if(rc==APR_SUCCESS)
 			{
 				if(!obj){
-					ap_lua_push_apr_table(L,(apr_table_t*)t);
+					ml_push_apr_table(L,(apr_table_t*)t, NULL, "jar",h->pool);
 				}
 				else
 				{
@@ -534,7 +534,7 @@ static int ap2req_cookie_make(lua_State*L) {
 				value = luaL_checkstring(L,2);
 				rc = apreq_parse_cookie_header(h->pool, jar, value);
 				if(rc==APR_SUCCESS) {
-					ap_lua_push_apr_table(L, jar);
+					ml_push_apr_table(L, jar, NULL, "jar", h->pool);
 				}
 				return ap2req_push_status(L, rc);
 			}
@@ -580,7 +580,7 @@ static int param_index(lua_State*L)
 		}else if(strcmp(key,"info")==0)
 		{
 			if (p->info)
-                ap_lua_push_apr_table(L, p->info);
+                ml_push_apr_table(L, p->info,NULL,"info",p->upload->p);
 			else
 				lua_pushnil(L);
 		}else if(strcmp(key,"tainted")==0)
@@ -639,7 +639,7 @@ static int ap2req_param(lua_State *L)
 		apr_table_t* t = apreq_params(h,h->pool);
 
 		if(t)
-			ap_lua_push_apr_table(L,t);
+			ml_push_apr_table(L,t,NULL,"params",h->pool);
 		else
 			lua_pushnil(L);
 		return 1;
@@ -657,7 +657,7 @@ static int ap2req_param(lua_State *L)
 
 			if(s==APR_SUCCESS && t)
 			{
-				ap_lua_push_apr_table(L,(apr_table_t*)t);
+				ml_push_apr_table(L,(apr_table_t*)t,NULL,body?"body":"args",h->pool);
 				lua_pushboolean(L, body);
 			}else
 			{
@@ -719,7 +719,7 @@ static int ap2req_upload(lua_State*L) {
 
 	if(lua_isuserdata(L,2))
 	{
-		t = ap_lua_check_apr_table(L, 2);
+		t = ml_check_apr_table(L, 2);
 		start = 3;
 	}else{
 		apr_status_t s = apreq_body(h, &t);
@@ -729,7 +729,7 @@ static int ap2req_upload(lua_State*L) {
 	}
 	if(top<start)
 	{
-		ap_lua_push_apr_table(L, (apr_table_t *)apreq_uploads  (t,  h->pool));
+		ml_push_apr_table(L, (apr_table_t *)apreq_uploads  (t,  h->pool), NULL,"uploads",h->pool);
 		return 1;
 	}
 	while(start<=top)
@@ -783,7 +783,7 @@ static int ap2req_param_decode(lua_State*L) {
 
 static int ap2req_params_as_string(lua_State*L) {
 	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	apr_table_t *t = ap_lua_check_apr_table(L, 2);
+	apr_table_t *t = ml_check_apr_table(L, 2);
 	const char* key = luaL_checkstring(L,3);
 	apreq_join_t mode = luaL_optint(L,4,APREQ_JOIN_AS_IS);
 
@@ -795,7 +795,7 @@ static int ap2req_params_as_string(lua_State*L) {
 
 static int ap2req_parse_query_string(lua_State*L) {
 	apreq_handle_t *h = CHECK_APREQ_OBJECT(1);
-	apr_table_t *t = ap_lua_check_apr_table(L, 2);
+	apr_table_t *t = ml_check_apr_table(L, 2);
 	const char* query = luaL_checkstring(L,3);
 
 	apr_status_t rc = apreq_parse_query_string  ( h->pool,  t,  query ) ;

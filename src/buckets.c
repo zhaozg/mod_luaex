@@ -81,7 +81,7 @@ static int brigade_flatten(lua_State*L)
 	apr_bucket_brigade *bb = (apr_bucket_brigade*)CHECK_BUCKETBRIGADE_OBJECT(1);
 	apr_off_t off = 0;
 	apr_status_t rc = apr_brigade_length(bb, 1, &off);
-	apr_size_t len = (apr_size_t)off;
+	apr_size_t len = luaL_optinteger(L, 2, (apr_size_t)off);
 	
 	if(rc==APR_SUCCESS)
 	{
@@ -108,9 +108,10 @@ static int brigade_pflatten(lua_State*L)
 	apr_bucket_brigade *bb = (apr_bucket_brigade*) CHECK_BUCKETBRIGADE_OBJECT(1);
     request_rec *r = CHECK_REQUEST_OBJECT(2);
 	apr_size_t len = luaL_checkint(L,3);
+	apr_size_t plen=0;
 	char* c;
 
-	apr_status_t rc = apr_brigade_pflatten(bb, &c, &len, r->pool);
+	apr_status_t rc = apr_brigade_pflatten(bb, &c, &plen, r->pool);
 	if(rc==APR_SUCCESS)
 	{
 		lua_pushlstring(L,c,len);
