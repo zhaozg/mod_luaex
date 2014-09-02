@@ -42,7 +42,7 @@
 #include "lauxlib.h"
 
 #include "mod_lua.h"
-
+#include "lua_vmprep.h"
 #include <assert.h>
 #include <stdarg.h>
 #include <math.h>

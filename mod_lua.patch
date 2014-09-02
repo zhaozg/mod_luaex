@@ -1,26 +1,26 @@
 Index: lua_apr.c
 ===================================================================
---- lua_apr.c	(版本 1539237)
+--- lua_apr.c	(版本 1619663)
 +++ lua_apr.c	(工作副本)
-@@ -18,7 +18,7 @@
- #include "mod_lua.h"
+@@ -19,7 +19,7 @@
  #include "lua_apr.h"
+ APLOG_USE_MODULE(lua);
  
--apr_table_t *ap_lua_check_apr_table(lua_State *L, int index)
-+AP_LUA_DECLARE(apr_table_t*)  ap_lua_check_apr_table(lua_State *L, int index)
+-req_table_t *ap_lua_check_apr_table(lua_State *L, int index)
++AP_LUA_DECLARE(req_table_t*) ap_lua_check_apr_table(lua_State *L, int index)
  {
-     apr_table_t *t;
+     req_table_t* t;
      luaL_checkudata(L, index, "Apr.Table");
-@@ -27,7 +27,7 @@
+@@ -28,7 +28,7 @@
  }
  
  
--void ap_lua_push_apr_table(lua_State *L, apr_table_t *t)
-+AP_LUA_DECLARE(void)  ap_lua_push_apr_table(lua_State *L, apr_table_t *t)
+-void ap_lua_push_apr_table(lua_State *L, req_table_t *t)
++AP_LUA_DECLARE(void) ap_lua_push_apr_table(lua_State *L, req_table_t *t)
  {
      lua_boxpointer(L, t);
      luaL_getmetatable(L, "Apr.Table");
-@@ -60,7 +60,7 @@
+@@ -79,7 +79,7 @@
  };
  
  
@@ -31,23 +31,23 @@ Index: lua_apr.c
      luaL_register(L, "apr_table", lua_table_methods);
 Index: lua_apr.h
 ===================================================================
---- lua_apr.h	(版本 1539237)
+--- lua_apr.h	(版本 1619663)
 +++ lua_apr.h	(工作副本)
 @@ -29,8 +29,8 @@
  #include "apr_base64.h"
  
  
 -int ap_lua_init(lua_State *L, apr_pool_t * p);
--apr_table_t *ap_lua_check_apr_table(lua_State *L, int index);
--void ap_lua_push_apr_table(lua_State *L, apr_table_t *t);
+-req_table_t *ap_lua_check_apr_table(lua_State *L, int index);
+-void ap_lua_push_apr_table(lua_State *L, req_table_t *t);
 +AP_LUA_DECLARE(int) ap_lua_init(lua_State *L, apr_pool_t * p);
-+AP_LUA_DECLARE(apr_table_t*)  ap_lua_check_apr_table(lua_State *L, int index);
-+AP_LUA_DECLARE(void) ap_lua_push_apr_table(lua_State *L, apr_table_t *t);
++AP_LUA_DECLARE(req_table_t*) ap_lua_check_apr_table(lua_State *L, int index);
++AP_LUA_DECLARE(void) ap_lua_push_apr_table(lua_State *L, req_table_t *t);
  
  #endif /* !_LUA_APR_H_ */
 Index: lua_config.c
 ===================================================================
---- lua_config.c	(版本 1539237)
+--- lua_config.c	(版本 1619663)
 +++ lua_config.c	(工作副本)
 @@ -257,7 +257,7 @@
      {NULL, NULL}
@@ -60,7 +60,7 @@ Index: lua_config.c
      lua_pushvalue(L, -1);
 Index: lua_config.h
 ===================================================================
---- lua_config.h	(版本 1539237)
+--- lua_config.h	(版本 1619663)
 +++ lua_config.h	(工作副本)
 @@ -20,7 +20,7 @@
  #ifndef _APL_CONFIG_H_
@@ -73,9 +73,9 @@ Index: lua_config.h
                                                  const char *file,
 Index: lua_request.c
 ===================================================================
---- lua_request.c	(版本 1539237)
+--- lua_request.c	(版本 1619663)
 +++ lua_request.c	(工作副本)
-@@ -2418,7 +2418,7 @@
+@@ -2625,7 +2625,7 @@
      return rft;
  }
  
@@ -84,16 +84,16 @@ Index: lua_request.c
  {
  
      apr_hash_t *dispatch = apr_hash_make(p);
-@@ -2692,7 +2692,7 @@
+@@ -2900,7 +2900,7 @@
  
  }
  
 -void ap_lua_push_connection(lua_State *L, conn_rec *c)
 +AP_LUA_DECLARE(void) ap_lua_push_connection(lua_State *L, conn_rec *c)
  {
+     req_table_t *t;
      lua_boxpointer(L, c);
-     luaL_getmetatable(L, "Apache2.Connection");
-@@ -2709,7 +2709,7 @@
+@@ -2922,7 +2922,7 @@
  }
  
  
@@ -102,7 +102,7 @@ Index: lua_request.c
  {
      lua_boxpointer(L, s);
      luaL_getmetatable(L, "Apache2.Server");
-@@ -2722,7 +2722,7 @@
+@@ -2935,7 +2935,7 @@
      lua_pop(L, 1);
  }
  
@@ -113,7 +113,7 @@ Index: lua_request.c
      luaL_getmetatable(L, "Apache2.Request");
 Index: lua_request.h
 ===================================================================
---- lua_request.h	(版本 1539237)
+--- lua_request.h	(版本 1619663)
 +++ lua_request.h	(工作副本)
 @@ -21,10 +21,10 @@
  #include "mod_lua.h"
@@ -132,7 +132,7 @@ Index: lua_request.h
  #define APL_REQ_FUNTYPE_INT         2
 Index: lua_vmprep.c
 ===================================================================
---- lua_vmprep.c	(版本 1539237)
+--- lua_vmprep.c	(版本 1619663)
 +++ lua_vmprep.c	(工作副本)
 @@ -120,7 +120,7 @@
  
@@ -143,65 +143,18 @@ Index: lua_vmprep.c
  {
      lua_getglobal(L, "package");
      lua_getfield(L, -1, "loaded");
-@@ -339,8 +339,15 @@
- 
- 
-     if (spec->bytecode && spec->bytecode_len > 0) {
-+		int rc;
-         luaL_loadbuffer(L, spec->bytecode, spec->bytecode_len, spec->file);
--        lua_pcall(L, 0, LUA_MULTRET, 0);
-+        rc = lua_pcall(L, 0, LUA_MULTRET, 0);
-+		if(rc!=0){
-+			printf(
-+				"Error compile %s: %s\n", spec->file,
-+				rc == LUA_ERRMEM ? "memory allocation error"
-+				: lua_tostring(L, -1));
-+		}
-     }
-     else {
-         int rc;
-@@ -354,7 +361,13 @@
-                                            : lua_tostring(L, 0));
-             return APR_EBADF;
-         }
--        lua_pcall(L, 0, LUA_MULTRET, 0);
-+        rc = lua_pcall(L, 0, LUA_MULTRET, 0);
-+		if(rc!=0){
-+			printf(
-+				"Error compile %s: %s\n", spec->file,
-+				rc == LUA_ERRMEM ? "memory allocation error"
-+				: lua_tostring(L, -1));
-+		}
-     }
- 
- #ifdef AP_ENABLE_LUAJIT
-@@ -405,7 +418,7 @@
+@@ -410,7 +410,7 @@
   * Function used to create a lua_State instance bound into the web
   * server in the appropriate scope.
   */
 -lua_State *ap_lua_get_lua_state(apr_pool_t *lifecycle_pool,
-+AP_LUA_DECLARE(lua_State *) ap_lua_get_lua_state(apr_pool_t *lifecycle_pool,
++AP_LUA_DECLARE(lua_State *)  ap_lua_get_lua_state(apr_pool_t *lifecycle_pool,
                                                 ap_lua_vm_spec *spec, request_rec* r)
  {
      lua_State *L = NULL;
-@@ -514,7 +527,13 @@
-                                            : lua_tostring(L, 0));
-             return 0;
-         }
--        lua_pcall(L, 0, LUA_MULTRET, 0);
-+        rc = lua_pcall(L, 0, LUA_MULTRET, 0);
-+		if(rc!=0){
-+			printf(
-+				"Error compile %s: %s\n", spec->file,
-+				rc == LUA_ERRMEM ? "memory allocation error"
-+				: lua_tostring(L, -1));
-+		}
-     }
- 
-     return L;
 Index: lua_vmprep.h
 ===================================================================
---- lua_vmprep.h	(版本 1539237)
+--- lua_vmprep.h	(版本 1619663)
 +++ lua_vmprep.h	(工作副本)
 @@ -118,7 +118,7 @@
  /**
@@ -212,20 +165,22 @@ Index: lua_vmprep.h
  
  /*
   * alternate means of getting lua_State (preferred eventually)
-@@ -132,7 +132,7 @@
+@@ -132,8 +132,9 @@
   * @cb callback for vm initialization called *before* the file is opened
   * @ctx a baton passed to cb
   */
 -lua_State *ap_lua_get_lua_state(apr_pool_t *lifecycle_pool,
 +AP_LUA_DECLARE(lua_State *) ap_lua_get_lua_state(apr_pool_t *lifecycle_pool,
                                                  ap_lua_vm_spec *spec, request_rec* r);
++AP_LUA_DECLARE(void) ap_lua_release_state(lua_State* L, ap_lua_vm_spec* spec, request_rec* r);
  
  #if APR_HAS_THREADS || defined(DOXYGEN)
+ /*
 Index: mod_lua.c
 ===================================================================
---- mod_lua.c	(版本 1539237)
+--- mod_lua.c	(版本 1619663)
 +++ mod_lua.c	(工作副本)
-@@ -91,11 +91,11 @@
+@@ -115,11 +115,11 @@
      ap_lua_load_apache2_lmodule(L);
      ap_lua_load_request_lmodule(L, p);
      ap_lua_load_config_lmodule(L);
@@ -238,3 +193,33 @@ Index: mod_lua.c
      return OK;
  }
  
+@@ -145,7 +145,7 @@
+     }
+ }
+ 
+-static void ap_lua_release_state(lua_State* L, ap_lua_vm_spec* spec, request_rec* r) {
++AP_LUA_DECLARE(void) ap_lua_release_state(lua_State* L, ap_lua_vm_spec* spec, request_rec* r) {
+     char *hash;
+     apr_reslist_t* reslist = NULL;
+     if (spec->scope == AP_LUA_SCOPE_SERVER) {
+@@ -2159,3 +2159,8 @@
+     lua_commands,               /* table of config file commands       */
+     lua_register_hooks          /* register hooks                      */
+ };
++
++AP_LUA_DECLARE(int) ap_lua_handler(request_rec *r)
++{
++	return lua_handler(r);
++}
+\ No newline at end of file
+Index: mod_lua.h
+===================================================================
+--- mod_lua.h	(版本 1619663)
++++ mod_lua.h	(工作副本)
+@@ -173,4 +173,6 @@
+ 
+ int ap_lua_ssl_is_https(conn_rec *c);
+ 
++AP_LUA_DECLARE(int) ap_lua_handler(request_rec *r);
++
+ #endif /* !_MOD_LUA_H_ */
