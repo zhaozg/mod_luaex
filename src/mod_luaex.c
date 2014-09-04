@@ -541,27 +541,6 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
 
 //////////////////////////////////////////////////////////////////////////
 
-APREQ_DECLARE(apreq_handle_t *) apreq_handle_apache2(request_rec *r);
-apreq_handle_t* ml_r2apreq(lua_State*L, int n)
-{
-  apr_status_t s;
-  request_rec *r = CHECK_REQUEST_OBJECT(n);
-  apreq_handle_t* h = NULL;
-  s = apr_pool_userdata_get((void**)&h, "apreq_handle_t*", r->pool);
-  if (s == OK)
-  {
-    if (h == NULL)
-    {
-      h  = apreq_handle_apache2(r);
-      apr_pool_userdata_set(h,
-                            "apreq_handle_t*",
-                            apr_pool_cleanup_null,
-                            r->pool);
-    }
-  }
-  return h;
-};
-
 apr_pool_t *lua_apr_pool_register(lua_State *L, apr_pool_t *new_pool);
 static apr_status_t ml_pool_register(lua_State *L, apr_pool_t*pool )
 {
@@ -588,10 +567,7 @@ static apr_status_t ml_lua_open(lua_State *L, apr_pool_t *p)
   luaopen_apr_core(L);
   lua_setglobal(L, "apr.core");
 #endif
-  ml_luaopen_buckets(L);
-  ml_luaopen_apreq(L, p);
   ml_luaopen_extends(L) ;
-  ml_ext_apr_table(L);
   ml_ext_request_lmodule(L, p);
   return OK;
 };

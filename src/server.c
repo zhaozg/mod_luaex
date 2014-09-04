@@ -16,56 +16,13 @@
 
 static const ml_constants status_tabs[] =
 {
-  { "OK",                         OK },
-  { "DECLINED",                   DECLINED },
   { "HTTP_BAD_REQUEST",           HTTP_BAD_REQUEST },
   { "HTTP_UNAUTHORIZED",          HTTP_UNAUTHORIZED },
   { "HTTP_FORBIDDEN",             HTTP_FORBIDDEN },
   { "HTTP_NOT_FOUND",             HTTP_NOT_FOUND },
   { "HTTP_METHOD_NOT_ALLOWED",    HTTP_METHOD_NOT_ALLOWED },
   { "HTTP_INTERNAL_SERVER_ERROR", HTTP_INTERNAL_SERVER_ERROR },
-  { "HTTP_MOVED_TEMPORARILY",     HTTP_MOVED_TEMPORARILY },
   { "AP_FILTER_ERROR",            AP_FILTER_ERROR },
-
-  {"EBADARG",   APR_EBADARG},
-
-  {"ERROR_GENERAL",   APREQ_ERROR_GENERAL},
-  {"ERROR_TAINTED",   APREQ_ERROR_TAINTED},
-  {"ERROR_INTERRUPT",    APREQ_ERROR_INTERRUPT},
-
-  {"ERROR_BADDATA",   APREQ_ERROR_BADDATA},
-  {"ERROR_BADCHAR",    APREQ_ERROR_BADCHAR},
-  {"ERROR_BADSEQ",  APREQ_ERROR_BADSEQ},
-  {"ERROR_BADATTR",    APREQ_ERROR_BADATTR},
-  {"ERROR_BADHEADER",   APREQ_ERROR_BADHEADER},
-  {"ERROR_BADUTF8", APREQ_ERROR_BADUTF8},
-
-  {"ERROR_NODATA",    APREQ_ERROR_NODATA},
-  {"ERROR_NOTOKEN",   APREQ_ERROR_NOTOKEN},
-  {"ERROR_NOATTR",    APREQ_ERROR_NOATTR},
-  {"ERROR_NOHEADER",  APREQ_ERROR_NOHEADER},
-  {"ERROR_NOPARSER",    APREQ_ERROR_NOPARSER},
-
-  {"ERROR_MISMATCH",    APREQ_ERROR_MISMATCH},
-  {"ERROR_OVERLIMIT",   APREQ_ERROR_OVERLIMIT},
-  {"ERROR_UNDERLIMIT",    APREQ_ERROR_UNDERLIMIT},
-  {"ERROR_NOTEMPTY",    APREQ_ERROR_NOTEMPTY},
-
-  {"CHARSET_ASCII",    APREQ_CHARSET_ASCII},
-  {"CHARSET_LATIN1",   APREQ_CHARSET_LATIN1}, /* ISO-8859-1   */
-  {"CHARSET_CP1252",  APREQ_CHARSET_CP1252}, /* Windows-1252 */
-  {"CHARSET_UTF8",    APREQ_CHARSET_UTF8},
-
-  {"JOIN_AS_IS",  APREQ_JOIN_AS_IS},      /**< Join the strings without modification */
-  {"JOIN_ENCODE", APREQ_JOIN_ENCODE},     /**< Url-encode the strings before joining them */
-  {"JONE_DECODE", APREQ_JOIN_DECODE},     /**< Url-decode the strings before joining them */
-  {"JONE_QUOTE",  APREQ_JOIN_QUOTE},       /**< Quote the strings, backslashing existing quote marks. */
-
-  {"MATCH_FULL",    APREQ_MATCH_FULL},       /**< Full match only. */
-  {"MATCH_PARTIAL", APREQ_MATCH_PARTIAL},     /**< Partial matches are ok. */
-  {"OVERLAP_TABLES_SET",    APR_OVERLAP_TABLES_SET},       /**< Full match only. */
-  {"OVERLAP_TABLES_MERGE",  APR_OVERLAP_TABLES_MERGE},     /**< Partial matches are ok. */
-
 
   { NULL, 0 }
 };

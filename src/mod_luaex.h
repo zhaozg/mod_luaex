@@ -186,9 +186,6 @@ apr_status_t ml_register_hooks (apr_pool_t *p);
 /*                                                                      */
 /************************************************************************/
 
-
-#include "apreq.h"
-#include "apreq_module.h"
 #include "apr_dbd.h"
 #include "mod_dbd.h"
 #include "apr_memcache.h"
@@ -238,25 +235,9 @@ extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 #define CHECK_SLOTMEM_OBJECT(x) ((ml_slotmem*)luaL_checkudata(L, x, "mod_luaex.slotmem"))
 #define CHECK_DBD_OBJECT(x) ((ml_dbd*)luaL_checkudata(L,x,"mod_luaex.dbd"))
 
-#define CHECK_BUCKETBRIGADE_OBJECT(x)  ((apr_bucket_brigade *) ml_check_object(L, x,"mod_luaex.bucketbrigade"))
-#define CHECK_BUCKET_OBJECT(x)  ((apr_bucket *) ml_check_object(L, x,"mod_luaex.bucket"))
-
-#define PUSH_BUCKETBRIGADE_OBJECT(x) ml_push_object(L, x, "mod_luaex.bucketbrigade")
-#define PUSH_BUCKET_OBJECT(x) ml_push_object(L, x, "mod_luaex.bucket")
-
-#define CHECK_APREQ_OBJECT(x)  ml_r2apreq(L, x)
-#define CHECK_COOKIE_OBJECT(x) ((apreq_cookie_t*) ml_check_object(L, x,"mod_luaex.cookie"))
-#define CHECK_PARAM_OBJECT(x)  ((apreq_param_t *) ml_check_object(L, x,"mod_luaex.param"))
-
-#define PUSH_COOKIE_OBJECT(x)   ml_push_object(L, x, "mod_luaex.cookie")
-#define PUSH_PARAM_OBJECT(x)    ml_push_object(L, x, "mod_luaex.param")
-
 apr_table_t* ml_check_apr_table(lua_State *L, int index);
 void ml_push_apr_table(lua_State *L, apr_table_t *t, request_rec* r, const char*name, apr_pool_t* pool);
 
-int ml_ext_apr_table(lua_State*L);
-int ml_luaopen_apreq(lua_State *L, apr_pool_t *p);
-int ml_luaopen_buckets(lua_State *L);
 int ml_luaopen_extends(lua_State*L);
 
 apr_status_t ml_retrieve_option_functions (apr_pool_t *p);
@@ -280,9 +261,6 @@ int ml_ssl_var_lookup(lua_State* L);
 
 int ml_list_provider(lua_State*L);
 
-int ml_dbd_acquire(lua_State *L);
-int ml_dbdriver_prepare(lua_State *L) ;
-
 #ifdef ML_HAVE_RESLIST
 int ml_reslist_acquire(lua_State*L);
 int ml_reslist_release(lua_State*L);
@@ -292,7 +270,6 @@ int ml_reslist_invalidate(lua_State*L);
 void pstack_dump(lua_State *L, const char *msg);
 int ml_apache2_extends(lua_State*L);
 void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p);
-apreq_handle_t* ml_r2apreq(lua_State*L, int n);
 req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool);
 
 # ifdef WIN32

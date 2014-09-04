@@ -861,9 +861,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "slotmem_attach", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_attach, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "slotmem_lookup", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
 
-  apr_hash_set(dispatch, "dbd_acquire", APR_HASH_KEY_STRING, ml_makefun(&ml_dbd_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
-  apr_hash_set(dispatch, "dbd_prepare", APR_HASH_KEY_STRING, ml_makefun(&ml_dbdriver_prepare, APL_REQ_FUNTYPE_LUACFUN, p));
-
 #ifdef ML_HAVE_RESLIST
   apr_hash_set(dispatch, "reslist_acquire", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "reslist_release", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_release, APL_REQ_FUNTYPE_LUACFUN, p));

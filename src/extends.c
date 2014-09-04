@@ -18,12 +18,6 @@ static APR_OPTIONAL_FN_TYPE(ssl_ext_list)   *ssl_ext_list = NULL;
 static APR_OPTIONAL_FN_TYPE(ssl_proxy_enable)   *ssl_proxy_enable = NULL;
 static APR_OPTIONAL_FN_TYPE(ssl_engine_disable)   *ssl_engine_disable = NULL;
 
-static APR_OPTIONAL_FN_TYPE(ap_dbd_open) *lua_dbd_open = NULL;
-static APR_OPTIONAL_FN_TYPE(ap_dbd_close) *lua_dbd_close = NULL;
-static APR_OPTIONAL_FN_TYPE(ap_dbd_acquire) *lua_dbd_acquire = NULL;
-static APR_OPTIONAL_FN_TYPE(ap_dbd_cacquire) *lua_dbd_cacquire = NULL;
-static APR_OPTIONAL_FN_TYPE(ap_dbd_prepare) *lua_dbd_prepare = NULL;
-
 static APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_loaded_module_symbol = NULL;
 
 apr_status_t ml_retrieve_option_functions (apr_pool_t *p)
@@ -35,12 +29,6 @@ apr_status_t ml_retrieve_option_functions (apr_pool_t *p)
 
   ssl_var_lookup = APR_RETRIEVE_OPTIONAL_FN(ssl_var_lookup);
   ssl_is_https = APR_RETRIEVE_OPTIONAL_FN(ssl_is_https);
-
-  lua_dbd_open = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_open);
-  lua_dbd_close = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_close);
-  lua_dbd_acquire = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_acquire);
-  lua_dbd_cacquire = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_cacquire);
-  lua_dbd_prepare = APR_RETRIEVE_OPTIONAL_FN(ap_dbd_prepare);
 
   ap_find_loaded_module_symbol = APR_RETRIEVE_OPTIONAL_FN(ap_find_loaded_module_symbol);
 
@@ -513,160 +501,6 @@ int ml_socache_lookup(lua_State*L)
 /* DBD extend API                                                       */
 /************************************************************************/
 
-static ap_dbd_t* srv_dbd_open(server_rec* s);
-static void srv_dbd_close(server_rec*s, ap_dbd_t*dbd);
-static void srv_dbd_prepare(server_rec*s, const char*query, const char*lable);
-
-ap_dbd_t* dbd_acquire(request_rec* r);
-ap_dbd_t* dbd_cacquire(conn_rec* c);
-
-int create_dbd_object(lua_State *L,
-                      ap_dbd_t* dbd,
-                      apr_dbd_transaction_t *trans,
-                      apr_dbd_prepared_t *statement,
-                      apr_dbd_results_t *result);
-
-static ap_dbd_t* srv_dbd_open(server_rec* s)
-{
-  if (lua_dbd_open)
-    return lua_dbd_open(s->process->pool, s);
-  return NULL;
-}
-
-static void srv_dbd_close(server_rec*s, ap_dbd_t*dbd)
-{
-  if (lua_dbd_close)
-    lua_dbd_close(s, dbd);
-}
-
-static void srv_dbd_prepare(server_rec*s, const char*query, const char*lable)
-{
-  if (lua_dbd_prepare)
-    lua_dbd_prepare(s, query, lable);
-}
-
-ap_dbd_t* dbd_acquire(request_rec* r)
-{
-  if (lua_dbd_acquire)
-    return lua_dbd_acquire(r);
-  return NULL;
-}
-
-ap_dbd_t* dbd_cacquire(conn_rec* c)
-{
-  if (lua_dbd_cacquire)
-    return lua_dbd_cacquire(c);
-  return NULL;
-}
-
-int lua_apr_dbd_register(lua_State *L, ap_dbd_t* a_dbd);
-int ml_dbd_acquire(lua_State *L)
-{
-  ap_dbd_t* dbd = NULL;
-  server_rec *s = NULL;
-  ml_dbd * obj  = NULL;
-
-  if (ml_isudata(L, 1, "Apache2.Request"))
-  {
-    request_rec* r = CHECK_REQUEST_OBJECT(1);
-    dbd = dbd_acquire(r);
-  }
-  else if (ml_isudata(L, 1, "Apache2.Connection"))
-  {
-    conn_rec *c = (conn_rec *)CHECK_CONNECTION_OBJECT(1);
-    dbd = dbd_cacquire(c);
-  }
-  else if (ml_isudata(L, 1, "Apache2.Server"))
-  {
-    s = (server_rec *)CHECK_SERVER_OBJECT(1);
-    dbd = srv_dbd_open(s);
-  }
-  else
-  {
-    luaL_error(L, "arg #1 should be Apache2.Request, Apache2.Connection or Apache2.Server");
-    return 0;
-  }
-
-  if (dbd)
-  {
-    ml_dbd * obj;
-    lua_apr_dbd_register(L, dbd);
-
-    obj = lua_newuserdata(L, sizeof(ml_dbd));
-    obj->dbd = dbd;
-    obj->s = s;
-
-    luaL_getmetatable(L, "mod_luaex.dbd");
-    luaL_checktype(L, -1, LUA_TTABLE);
-    lua_setmetatable(L, -2);
-    return 2;
-  }
-  return 0;
-}
-
-static int srv_close_dbdriver(lua_State *L)
-{
-  ml_dbd * o = CHECK_DBD_OBJECT(1);
-  if (o->s)
-    srv_dbd_close(o->s, o->dbd);
-  o->dbd = NULL;
-  o->s = NULL;
-  return 0;
-}
-
-int ml_dbdriver_prepare(lua_State *L)
-{
-  server_rec *s = NULL;
-  const char* q;
-  const char* l;
-  if (ml_isudata(L, 1, "Apache2.Server"))
-    s = (server_rec *)CHECK_SERVER_OBJECT(1);
-  else if (ml_isudata(L, 1, "Apache2.Connection"))
-    s = ((conn_rec *)CHECK_CONNECTION_OBJECT(1))->base_server;
-  else if (ml_isudata(L, 1, "Apache2.Request"))
-    s = ((request_rec*)CHECK_REQUEST_OBJECT(1))->server;
-  else
-    luaL_error(L, "arg #1 should be Apache2.Request, Apache2.Connection or Apache2.Server");
-
-  q = luaL_checkstring(L, 2);
-  l = luaL_checkstring(L, 3);
-  srv_dbd_prepare(s, q, l);
-
-  return 0;
-}
-
-int ml_dbdriver_tostring(lua_State* L)
-{
-  ml_dbd *d = CHECK_DBD_OBJECT(1);
-  if (d->s)
-    lua_pushfstring(L, "mod_luaex.dbd(%p)server(%p)", d->dbd, d->s);
-  else
-    lua_pushfstring(L, "mod_luaex.dbd(%p)", d->dbd);
-  return 1;
-}
-
-int ml_dbdriver_index(lua_State* L)
-{
-  ml_dbd *d = CHECK_DBD_OBJECT(1);
-  int len;
-  const char *lable = luaL_checklstring(L, 2, (size_t*)&len);
-  const char *sql = apr_hash_get(d->dbd->prepared, lable, len);
-  if (sql)
-    lua_pushstring(L, sql);
-  else
-    lua_pushnil(L);
-
-  return 1;
-}
-
-static luaL_Reg dbd_mtab[] =
-{
-  {"__gc",    srv_close_dbdriver},
-  {"__index", ml_dbdriver_index},
-  {"__tostring", ml_dbdriver_tostring},
-
-  {NULL, NULL }
-};
 
 int ml_luaopen_extends(lua_State *L)
 {
@@ -674,7 +508,5 @@ int ml_luaopen_extends(lua_State *L)
   luaL_register(L, NULL, so_provider_mtab);
   luaL_newmetatable(L, "mod_luaex.slotmem");
   luaL_register(L, NULL, sm_provider_mtab);
-  luaL_newmetatable(L, "mod_luaex.dbd");
-  luaL_register(L, NULL, dbd_mtab);
   return 1;
 }
