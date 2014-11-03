@@ -157,132 +157,6 @@ static int lua_ap_exists_config_define (lua_State *L)
   return 1;
 }
 
-
-/*scoreboard api*/
-
-static int lua_ap_scoreboard_process(lua_State *L)
-{
-  int i = luaL_checkint(L, 1);
-  process_score* ps_record = ap_get_scoreboard_process(i);
-  if (ps_record)
-  {
-    lua_newtable(L);
-
-    lua_pushstring(L, "connections");
-    lua_pushnumber(L, ps_record->connections);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "keepalive");
-    lua_pushnumber(L, ps_record->keep_alive);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "lingering_close");
-    lua_pushnumber(L, ps_record->lingering_close);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "pid");
-    lua_pushnumber(L, ps_record->pid);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "suspended");
-    lua_pushnumber(L, ps_record->suspended);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "write_completion");
-    lua_pushnumber(L, ps_record->write_completion);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "not_accepting");
-    lua_pushnumber(L, ps_record->not_accepting);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "quiescing");
-    lua_pushnumber(L, ps_record->quiescing);
-    lua_settable(L, -3);
-
-    return 1;
-  }
-  return 0;
-}
-
-static int lua_ap_scoreboard_worker(lua_State *L)
-{
-  int i = luaL_checkint(L, 1); /*child num*/
-  int j = luaL_checkint(L, 2); /*thread num*/
-  worker_score* ws_record = ap_get_scoreboard_worker_from_indexes(i, j);
-  if (ws_record)
-  {
-    lua_newtable(L);
-
-    lua_pushstring(L, "access_count");
-    lua_pushnumber(L, ws_record->access_count);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "bytes_served");
-    lua_pushnumber(L, (lua_Number)ws_record->bytes_served);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "client");
-    lua_pushstring(L, ws_record->client);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "conn_bytes");
-    lua_pushnumber(L, (lua_Number)ws_record->conn_bytes);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "conn_count");
-    lua_pushnumber(L, ws_record->conn_count);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "generation");
-    lua_pushnumber(L, ws_record->generation);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "last_used");
-    lua_pushnumber(L, (lua_Number)ws_record->last_used);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "pid");
-    lua_pushnumber(L, ws_record->pid);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "request");
-    lua_pushstring(L, ws_record->request);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "start_time");
-    lua_pushnumber(L, (lua_Number)ws_record->start_time);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "status");
-    lua_pushnumber(L, ws_record->status);
-    lua_settable(L, -3);
-
-    lua_pushstring(L, "stop_time");
-    lua_pushnumber(L, (lua_Number)ws_record->stop_time);
-    lua_settable(L, -3);
-
-#if APR_HAS_THREADS
-    lua_pushstring(L, "tid");
-    lua_pushinteger(L, (lua_Integer)ws_record->tid);
-    lua_settable(L, -3);
-#endif
-
-    lua_pushstring(L, "vhost");
-    lua_pushstring(L, ws_record->vhost);
-    lua_settable(L, -3);
-
-    return 1;
-  }
-  return 0;
-}
-
-static int lua_ap_restarted_time(lua_State *L)
-{
-  lua_pushnumber(L, (lua_Number)ap_scoreboard_image->global->restart_time);
-  return 1;
-}
-
 static int lua_ap_method_register(lua_State *L)
 {
   server_rec *s = (server_rec *)CHECK_SERVER_OBJECT(1);
@@ -317,18 +191,8 @@ int ml_apache2_extends(lua_State*L)
   lua_pushcfunction(L, lua_ap_exists_config_define);
   lua_setfield(L, -2, "exists_config_define");
 
-  lua_pushcfunction (L, lua_ap_restarted_time);
-  lua_setfield(L, -2, "restarted_time");
-
-  lua_pushcfunction (L, lua_ap_scoreboard_process);
-  lua_setfield(L, -2, "scoreboard_process");
-
-  lua_pushcfunction (L, lua_ap_scoreboard_worker);
-  lua_setfield(L, -2, "scoreboard_worker");
-
   lua_pushcfunction (L, lua_ap_method_register);
   lua_setfield(L, -2, "method_register");
-
 
   ap_mpm_query(AP_MPMQ_HARD_LIMIT_THREADS, &limit);
   lua_pushinteger(L, limit);
