@@ -222,61 +222,6 @@ static int req_meets(lua_State*L )
 
   return 1;
 }
-static int req_sendfile(lua_State* L)
-{
-  request_rec *r = CHECK_REQUEST_OBJECT(1);
-  const char *fname = luaL_checkstring(L, 2);
-  apr_size_t offset = luaL_optlong(L, 3, 0);
-  apr_size_t len = luaL_optlong(L, 4, -1);
-
-  apr_status_t status;
-
-  status = apr_stat(&r->finfo, fname, APR_FINFO_SIZE | APR_FINFO_MTIME | APR_FINFO_TYPE, r->pool);
-  if (status != APR_SUCCESS || r->finfo.filetype != APR_REG)
-  {
-    ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Could not stat file for reading %s", fname);
-    lua_pushnil(L);
-    lua_pushstring(L, "Could not stat file for reading");
-    return 2;
-  }
-  if (len == -1)
-    len = (apr_size_t)r->finfo.size;
-  ap_update_mtime(r, r->finfo.mtime);
-  ap_set_last_modified(r);
-  ap_set_etag(r);
-  ap_set_accept_ranges(r);
-  ap_set_content_length(r, len);
-
-  status = ap_meets_conditions(r);
-  if (status == OK)
-  {
-    apr_file_t *fd;
-    status = apr_file_open(&fd, fname, APR_READ, APR_OS_DEFAULT, r->pool);
-    if (status != APR_SUCCESS)
-    {
-      ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Could not open file for reading %s", fname);
-      lua_pushnil(L);
-      lua_pushstring(L, "Could not open file for reading");
-      return 2;
-    }
-    r->status = HTTP_OK;
-    status = ap_send_fd(fd, r, offset,  len, &len);
-    apr_file_close(fd);
-
-    if (status != APR_SUCCESS)
-    {
-      ap_log_rerror (APLOG_MARK, APLOG_ERR, status, r, "Write failed, client closed connection.");
-      lua_pushnil(L);
-      lua_pushstring(L, "Write failed, client closed connection.");
-      return 2;
-    }
-  }
-  else
-    r->status = status;
-  lua_pushinteger(L, r->status);
-  lua_pushinteger(L, len);
-  return 2;
-}
 
 static int pushresult (lua_State *L, int i, const char *filename)
 {
@@ -820,7 +765,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "internal_redirect_handle", APR_HASH_KEY_STRING, ml_makefun(&req_internal_redirect_handle, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "redirect", APR_HASH_KEY_STRING, ml_makefun(&req_redirect, APL_REQ_FUNTYPE_LUACFUN, p));
-  apr_hash_set(dispatch, "sendfile", APR_HASH_KEY_STRING, ml_makefun(&req_sendfile, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "meets",    APR_HASH_KEY_STRING, ml_makefun(&req_meets,    APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "get_remote_host", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_host, APL_REQ_FUNTYPE_LUACFUN, p));
