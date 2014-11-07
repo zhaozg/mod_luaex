@@ -3,7 +3,6 @@
 
 #include <mod_session.h>
 #include <mod_ssl.h>
-#include <mod_dbd.h>
 #include "lua_request.h"
 #include "lua_apr.h"
 

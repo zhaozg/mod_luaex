@@ -164,30 +164,17 @@ int  ml_push_object(lua_State*L, const void* data, const char*metaname);
 apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb);
 apr_status_t ml_register_hooks (apr_pool_t *p);
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-
-#include <apr_dbd.h>
-
 #include <ap_provider.h>
 #include <ap_slotmem.h>
 #include <ap_socache.h>
 
 #include <mod_so.h>
-#include <mod_dbd.h>
 #include "mod_luaex.h"
 
 #ifndef STORAGE_CACHE_TIMEOUT
 #define STORAGE_CACHE_TIMEOUT  600
 #endif
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-
-#include "apr_dbd.h"
-#include "mod_dbd.h"
 #include "apr_memcache.h"
 #include "ap_provider.h"
 
@@ -216,13 +203,6 @@ typedef struct ml_socache_t
   int _maxdatalen;
 } ml_socache;
 
-typedef struct
-{
-  ap_dbd_t *dbd;
-  server_rec *s;
-} ml_dbd;
-
-
 extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 
 #define CHECK_REQUEST_OBJECT(x)  ml_check_object(L, x,"Apache2.Request")
@@ -233,7 +213,6 @@ extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 #define CHECK_SESSION_OBJECT(x) ml_check_object(L, x, "mod_luaex.session")
 #define CHECK_SOCACHE_OBJECT(x) ((ml_socache*)luaL_checkudata(L, x, "mod_luaex.socache"))
 #define CHECK_SLOTMEM_OBJECT(x) ((ml_slotmem*)luaL_checkudata(L, x, "mod_luaex.slotmem"))
-#define CHECK_DBD_OBJECT(x) ((ml_dbd*)luaL_checkudata(L,x,"mod_luaex.dbd"))
 
 apr_table_t* ml_check_apr_table(lua_State *L, int index);
 void ml_push_apr_table(lua_State *L, apr_table_t *t, request_rec* r, const char*name, apr_pool_t* pool);

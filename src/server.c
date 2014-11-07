@@ -1,8 +1,6 @@
 #include "mod_luaex.h"
 
-#include "mod_dbd.h"
 #include <mod_so.h>
-#include <lua_apr.h>
 
 #include "private.h"
 
