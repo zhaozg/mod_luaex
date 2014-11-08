@@ -55,7 +55,7 @@ void ml_push_apr_table(lua_State *L, apr_table_t *ta, request_rec* r, const char
   req_table_t* t = apr_pcalloc(r ? r->pool : pool, sizeof(req_table_t));
   t->t = ta;
   t->r = r;
-  t->n = name;
+  t->n = (char*)name;
   ap_lua_push_apr_table(L, t);
 }
 
