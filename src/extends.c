@@ -347,7 +347,7 @@ static luaL_Reg sm_provider_mtab[] =
 {
   {"__tostring",  ml_smp_tostring},
   {"__newindex",  ml_smp_put},
-  {"__index",   ml_smp_get},
+  {"__index",     ml_smp_get},
   {"__len",       ml_smp_len},
   {"__call",      ml_smp_call},
   {"__unm",       ml_smp_free_slots},
@@ -495,11 +495,6 @@ int ml_socache_lookup(lua_State*L)
 
   return 1;
 }
-
-/************************************************************************/
-/* DBD extend API                                                       */
-/************************************************************************/
-
 
 int ml_luaopen_extends(lua_State *L)
 {

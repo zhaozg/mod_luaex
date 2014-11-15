@@ -6,11 +6,9 @@
 
 #include "private.h"
 
-
 #if AP_SERVER_MAJORVERSION_NUMBER!=2
 #error Sorry, Only support Apache2
 #endif
-
 
 void pstack_dump(lua_State *L, const char *msg)
 {
