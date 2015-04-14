@@ -32,19 +32,6 @@ static int req_get_remote_logname (lua_State *L)
   return 1;
 }
 
-static int req_get_basic_auth_pw(lua_State *L)
-{
-  request_rec *req = CHECK_REQUEST_OBJECT(1);
-  const char *pw;
-
-  if (! ap_get_basic_auth_pw(req, &pw))
-    lua_pushstring(L, pw);
-  else
-    lua_pushnil(L);
-
-  return 1;
-}
-
 /**
 * Lookup the remote client's DNS name or IP address
 * @param conn The current connection
@@ -85,24 +72,6 @@ static int req_meets_conditions(lua_State*L )
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
   lua_pushnumber(L, ap_meets_conditions(r));
-  return 1;
-}
-
-static int req_get_server_port (lua_State *L)
-{
-  request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-  lua_pushnumber (L, ap_get_server_port(r));
-  return 1;
-}
-
-static int lua_ap_allowoverrides(lua_State *L)
-{
-  request_rec *r = CHECK_REQUEST_OBJECT(1);
-  char options[128];
-  int opts = ap_allow_overrides(r);
-  sprintf(options, "%s %s %s %s %s %s", (opts & OR_NONE) ? "None" : "", (opts & OR_LIMIT) ? "Limit" : "", (opts & OR_OPTIONS) ? "Options" : "", (opts & OR_FILEINFO) ? "FileInfo" : "", (opts & OR_AUTHCFG) ? "AuthCfg" : "", (opts & OR_INDEXES) ? "Indexes" : "" );
-  lua_pushstring(L, options);
   return 1;
 }
 
@@ -749,14 +718,12 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
 
   /* add function */
   apr_hash_set(dispatch, "escapehtml", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_escapehtml, APL_REQ_FUNTYPE_LUACFUN, p));
-  apr_hash_set(dispatch, "allowoverrides", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_allowoverrides, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "add_version_component", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_add_version_component, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "request_has_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_request_has_body, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "get_limit_req_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_get_limit_req_body, APL_REQ_FUNTYPE_LUACFUN, p));
 
-  apr_hash_set(dispatch, "get_basic_auth_pw", APR_HASH_KEY_STRING, ml_makefun(&req_get_basic_auth_pw, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "meets_conditions", APR_HASH_KEY_STRING, ml_makefun(&req_meets_conditions, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "print", APR_HASH_KEY_STRING, ml_makefun(&req_print, APL_REQ_FUNTYPE_LUACFUN, p));
@@ -769,7 +736,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
 
   apr_hash_set(dispatch, "get_remote_host", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_host, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "get_remote_logname", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_logname, APL_REQ_FUNTYPE_LUACFUN, p));
-  apr_hash_set(dispatch, "get_server_port", APR_HASH_KEY_STRING, ml_makefun(&req_get_server_port, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "allow_methods", APR_HASH_KEY_STRING, ml_makefun(&req_allow_methods, APL_REQ_FUNTYPE_LUACFUN, p));
 
 
