@@ -418,7 +418,6 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
       }
 
       ap_lua_run_lua_request(L, r);
-      printf("A%d TOP=%d\n", i, lua_gettop(L));
       i++;
 
       rv = lua_resume(L, 1);
@@ -454,7 +453,6 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
     lua_getglobal(L, f->frec->name);
     lua_pushlstring(L, data, len);
     /* If Lua yielded, it means we have something to pass on */
-    printf("A%d TOP=%d\n", i, lua_gettop(L));
     i++;
     rv = lua_resume(L, 1);
 
@@ -494,7 +492,6 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
       lua_getglobal(L, f->frec->name);
       lua_pushnil(L);
 
-      printf("A%d TOP=%d LAST\n", i, lua_gettop(L));
       i++;
       fflush(stdout);
 
@@ -551,19 +548,25 @@ static apr_status_t ml_lua_request(lua_State *L, request_rec *r)
 };
 
 
-#ifdef LUA_APR_DECLARE_STATIC
 int luaopen_apr_core(lua_State *L);
-#endif
+int luaopen_rex_pcre(lua_State *L);
 
 static apr_status_t ml_lua_open(lua_State *L, apr_pool_t *p)
 {
   ml_pool_register(L, p);
   ml_apache2_extends(L);
 
-#ifdef LUA_APR_DECLARE_STATIC
-  luaopen_apr_core(L);
-  lua_setglobal(L, "apr.core");
-#endif
+  // Get package.preload so we can store builtins in it.
+  lua_getglobal(L, "package");
+  lua_getfield(L, -1, "preload");
+  lua_remove(L, -2); // Remove package
+  lua_pushcfunction(L, luaopen_apr_core);
+  lua_setfield(L, -2, "apr.core");
+
+  lua_pushcfunction(L, luaopen_rex_pcre);
+  lua_setfield(L, -2, "rex_pcre");
+
+  lua_pop(L, 1);
   ml_luaopen_extends(L) ;
   ml_ext_request_lmodule(L, p);
   return OK;
