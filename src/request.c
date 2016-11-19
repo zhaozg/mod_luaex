@@ -4,10 +4,6 @@
 
 APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module = NULL;
 
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
-
 static int req_header_only (request_rec *r)
 {
   return r->header_only;
@@ -75,8 +71,6 @@ static int req_meets_conditions(lua_State*L )
   return 1;
 }
 
-//////////////////////////////////////////////////////////////////////////
-
 static int req_allow_methods(lua_State *L)
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -112,7 +106,6 @@ static int req_internal_redirect_handle(lua_State* L)
   ap_internal_redirect_handler(new_uri, r);
   return 0;
 }
-
 
 static int req_redirect(lua_State* L)
 {
@@ -166,9 +159,8 @@ static int req_update_mtime(lua_State* L)
   return 0;
 }
 
-/************************************************************************/
-/* Apache Handle Process and Output                                     */
-/************************************************************************/
+
+/* Apache Handle Process and Output */
 static int req_meets(lua_State*L )
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -215,13 +207,6 @@ static int pushresult (lua_State *L, int i, const char *filename)
   }
 }
 
-static int req_rflush (lua_State *L)
-{
-  request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-  return pushresult(L, ap_rflush(r) >= 0, NULL);
-}
-
 static int read_chars (lua_State *L, request_rec* r, size_t n)
 {
   size_t len;
@@ -248,34 +233,37 @@ typedef struct
   apr_table_t *unsetenv;
 } env_dir_config_rec;
 
-static int req_add_cgi_vars (lua_State *L)
+static const char *const add_var_modes[] =
+{
+  "env",    /* 0 */
+  "common", /* 1 */
+  "cgi",    /* 2 */
+  "all",    /* 3 */
+  NULL,
+};
+
+static int req_add_env_vars (lua_State *L)
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
-  module* env_module = NULL;
-  env_dir_config_rec *sconf = NULL;
-
-  if (ap_find_module)
+  int mode = luaL_checkoption(L, 2, "all", add_var_modes);
+  if ((mode == 0 || mode == 3) && ap_find_module)
   {
-    env_module = ap_find_module(r->server, "env_module");
-    sconf = ap_get_module_config(r->per_dir_config, env_module);
-    if (sconf && sconf->vars && apr_table_elts(sconf->vars)->nelts)
+    module* env_module = ap_find_module(r->server, "env_module");
+    if (env_module)
     {
-      r->subprocess_env = apr_table_overlay(r->pool, r->subprocess_env, sconf->vars);
+      env_dir_config_rec *sconf = ap_get_module_config(r->per_dir_config, env_module);
+      if (sconf && sconf->vars && apr_table_elts(sconf->vars)->nelts)
+      {
+        r->subprocess_env = apr_table_overlay(r->pool, r->subprocess_env, sconf->vars);
+      }
     }
   }
+  if (mode == 1 || mode == 3)
+    ap_add_common_vars(r);
+  if (mode == 2 || mode == 3)
+    ap_add_cgi_vars(r);
 
-  ap_add_common_vars(r);
-  ap_add_cgi_vars(r);
-
-  if (lua_isstring(L, 2))
-  {
-    lua_pushstring(L, apr_table_get(r->subprocess_env, lua_tostring(L, 2)));
-  }
-  else
-  {
-    ml_push_apr_table(L, r->subprocess_env, r, "subprocess_env", NULL);
-  }
-  return 1;
+  return 0;
 }
 
 static int req_read (lua_State *L)
@@ -326,30 +314,36 @@ static int req_read (lua_State *L)
 ** It returns the status code.
 */
 /* FIXME */
-static int req_setup_client_block (lua_State *L)
+static int req_setup_client_block(lua_State *L)
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
-
-  const char *s = luaL_checklstring (L, 2, 0);
-  if (strcmp (s, "REQUEST_NO_BODY") == 0)
-    lua_pushnumber (L, ap_setup_client_block (r, REQUEST_NO_BODY));
-  else if (strcmp (s, "REQUEST_CHUNKED_ERROR") == 0)
-    lua_pushnumber (L, ap_setup_client_block (r, REQUEST_CHUNKED_ERROR));
-  else if (strcmp (s, "REQUEST_CHUNKED_DECHUNK") == 0)
-    lua_pushnumber (L, ap_setup_client_block (r, REQUEST_CHUNKED_DECHUNK));
+  int ret = OK;
+  const char *s = luaL_checklstring(L, 2, 0);
+  if (strcmp(s, "REQUEST_NO_BODY") == 0)
+    ret = ap_setup_client_block(r, REQUEST_NO_BODY);
+  else if (strcmp(s, "REQUEST_CHUNKED_ERROR") == 0)
+    ret = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR);
+  else if (strcmp(s, "REQUEST_CHUNKED_DECHUNK") == 0)
+    ret = ap_setup_client_block(r, REQUEST_CHUNKED_DECHUNK);
   else
-    lua_pushnil (L);
-  return 1;
+  {
+    lua_pushnil(L);
+    return 1;
+  }
+  if (ret == OK)
+  {
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+  lua_pushboolean(L, 0);
+  lua_pushinteger(L, ret);
+  return 2;
 }
 
 /*
 * Binding to ap_should_client_block.
 * Uses the request_rec defined as an upvalue.
 * Returns the status code.
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-Esta funcao nao deve ser chamada mais de uma vez.
-O que fazer para evitar isto?
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 */
 static int req_should_client_block (lua_State *L)
 {
@@ -368,8 +362,8 @@ static int req_should_client_block (lua_State *L)
 static int req_get_client_block (lua_State *L)
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
-  char buffer[POST_BUFFER_SIZE + 1];
-  int bytesleft = luaL_optint (L, 2, POST_BUFFER_SIZE);
+  char buffer[ML_POST_BUFFER_SIZE + 1];
+  int bytesleft = luaL_optint (L, 2, ML_POST_BUFFER_SIZE);
   int status, n;
   int count = 0;
   if (bytesleft < 0)
@@ -379,7 +373,7 @@ static int req_get_client_block (lua_State *L)
   }
   while (bytesleft)
   {
-    n = (bytesleft > POST_BUFFER_SIZE) ? POST_BUFFER_SIZE : bytesleft;
+    n = (bytesleft > ML_POST_BUFFER_SIZE) ? ML_POST_BUFFER_SIZE : bytesleft;
     status = ap_get_client_block (r, buffer, n);
     if (status == 0)   /* end-of-body */
     {
@@ -422,7 +416,6 @@ static int req_discard_request_body (lua_State *L)
   return 1;
 }
 
-
 static apr_bucket_brigade* get_bb(request_rec* r)
 {
   apr_bucket_brigade *bb = NULL;
@@ -437,7 +430,6 @@ static apr_bucket_brigade* get_bb(request_rec* r)
   }
   return bb;
 }
-
 
 static int lua_ap_recv(lua_State *L)
 {
@@ -504,7 +496,6 @@ static int lua_ap_recv(lua_State *L)
   }
 
   return 1;
-
 }
 
 static int lua_ap_send(lua_State *L)
@@ -550,7 +541,6 @@ static int lua_ap_add_version_component (lua_State *L)
   return 0;
 }
 
-
 /**
  * ap_satisfies (request_rec *r)
  * How the requires lines must be met.
@@ -572,7 +562,6 @@ static int lua_ap_satisfies (lua_State *L)
   if (returnValue == SATISFY_NOSPEC) lua_pushstring(L, "SATISFY_NOSPEC");
   return 1;
 }
-
 
 static int lua_ap_get_limit_req_body(lua_State *L)
 {
@@ -621,7 +610,7 @@ static int lua_ap_add_output_filter(lua_State *L)
   }
   return 1;
 }
-
+#if 0
 static int req_server(lua_State *L)
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -635,7 +624,7 @@ static int req_connection(lua_State *L)
   ap_lua_push_connection(L, r->connection);
   return 1;
 }
-
+#endif
 static int req_mime_types(lua_State *L)
 {
   request_rec *r = CHECK_REQUEST_OBJECT(1);
@@ -657,9 +646,7 @@ static int req_mime_types(lua_State *L)
     {
       ++fn;
     }
-    /* Always drop the path leading up to the file name.
-     */
-
+    /* Always drop the path leading up to the file name. */
 
     /* The exception list keeps track of those filename components that
      * are not associated with extensions indicating metadata.
@@ -696,7 +683,6 @@ static int req_mime_types(lua_State *L)
   return 1;
 }
 
-
 req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool)
 {
   req_fun_t *rft = apr_palloc(pool, sizeof(req_fun_t));
@@ -711,14 +697,12 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   lua_getfield(L, LUA_REGISTRYINDEX, "Apache2.Request.dispatch");
   dispatch = lua_touserdata(L, -1);
   lua_pop(L, 1);
-  assert(dispatch);
 
   /* add field */
   apr_hash_set(dispatch, "header_only", APR_HASH_KEY_STRING, ml_makefun(&req_header_only, APL_REQ_FUNTYPE_BOOLEAN, p));
 
   /* add function */
   apr_hash_set(dispatch, "escapehtml", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_escapehtml, APL_REQ_FUNTYPE_LUACFUN, p));
-
   apr_hash_set(dispatch, "add_version_component", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_add_version_component, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "request_has_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_request_has_body, APL_REQ_FUNTYPE_LUACFUN, p));
@@ -727,7 +711,7 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "meets_conditions", APR_HASH_KEY_STRING, ml_makefun(&req_meets_conditions, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "print", APR_HASH_KEY_STRING, ml_makefun(&req_print, APL_REQ_FUNTYPE_LUACFUN, p));
-  apr_hash_set(dispatch, "add_cgi_vars", APR_HASH_KEY_STRING, ml_makefun(&req_add_cgi_vars, APL_REQ_FUNTYPE_LUACFUN, p));
+  apr_hash_set(dispatch, "add_env_vars", APR_HASH_KEY_STRING, ml_makefun(&req_add_env_vars, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "internal_redirect", APR_HASH_KEY_STRING, ml_makefun(&req_internal_redirect, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "internal_redirect_handle", APR_HASH_KEY_STRING, ml_makefun(&req_internal_redirect_handle, APL_REQ_FUNTYPE_LUACFUN, p));
 
@@ -738,10 +722,10 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "get_remote_logname", APR_HASH_KEY_STRING, ml_makefun(&req_get_remote_logname, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "allow_methods", APR_HASH_KEY_STRING, ml_makefun(&req_allow_methods, APL_REQ_FUNTYPE_LUACFUN, p));
 
-
+#if 0
   apr_hash_set(dispatch, "server", APR_HASH_KEY_STRING, ml_makefun(&req_server, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "connection", APR_HASH_KEY_STRING, ml_makefun(&req_connection, APL_REQ_FUNTYPE_LUACFUN, p));
-
+#endif
   apr_hash_set(dispatch, "set_content_length", APR_HASH_KEY_STRING, ml_makefun(&req_set_content_length, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "set_etag", APR_HASH_KEY_STRING, ml_makefun(&req_set_etag, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "set_last_modified", APR_HASH_KEY_STRING, ml_makefun(&req_set_last_modified, APL_REQ_FUNTYPE_LUACFUN, p));
@@ -752,7 +736,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "send", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_send, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "read", APR_HASH_KEY_STRING, ml_makefun(&req_read, APL_REQ_FUNTYPE_LUACFUN, p));
-  apr_hash_set(dispatch, "rflush", APR_HASH_KEY_STRING, ml_makefun(&req_rflush, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "get_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_get_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "setup_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_setup_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "should_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_should_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
@@ -770,11 +753,7 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "slotmem_create", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_create, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "slotmem_attach", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_attach, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "slotmem_lookup", APR_HASH_KEY_STRING, ml_makefun(&ml_slotmem_lookup, APL_REQ_FUNTYPE_LUACFUN, p));
-
-#ifdef ML_HAVE_RESLIST
   apr_hash_set(dispatch, "reslist_acquire", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_acquire, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "reslist_release", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_release, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "reslist_invalidate", APR_HASH_KEY_STRING, ml_makefun(&ml_reslist_invalidate, APL_REQ_FUNTYPE_LUACFUN, p));
-#endif
-
 }

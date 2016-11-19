@@ -1,27 +1,15 @@
-# Installation directories
-# System's libraries directory (where binary libraries are installed)
-LUA_LIBDIR= "d:\work\luabuild\bin\Win32Debug\clibs\"
-
 # Lua includes and lib
-LUA_INC= "d:\work\lua-5.1\src"
-LUA_LIB= "d:\work\lua-5.1\src\lua51.lib"
-LUAAPR_ROOT= d:\work\luaclibs\lua-apr
+LUA_INC= "e:\PortableDev\luajit\include"
+LUA_LIB= "e:\PortableDev\luajit\lib\lua51.lib"
 
 # Apache include and lib
-APACHE2X_ROOT=d:\work\httpd
-APREQ_ROOT=d:\work\httpd\srclib\apreq
-
-APACHE2X_INC=/I$(APACHE2X_ROOT)/include /I$(APACHE2X_ROOT)/srclib/apr/include /I$(APACHE2X_ROOT)/modules/lua /I$(APACHE2X_ROOT)/modules/session \
-	/I$(APACHE2X_ROOT)/modules/database /I$(APACHE2X_ROOT)/modules/ssl
-
-APACHE2X_LIB=d:\Apache2x\lib\libapr-2.lib d:\Apache2x\lib\libhttpd.lib d:\work\httpd\modules\lua\Release\mod_lua.lib
-
+HTTPDSRC=E:\work\httpd
+APACHE2X_LIB=e:\Apache24\lib\libapr-2.lib e:\Apache24\lib\libhttpd.lib e:\Apache24\lib\mod_lua.lib
+APACHE2X_INC=/I$(HTTPDSRC)\modules\lua /I$(HTTPDSRC)\include /IE:\apache24\include
 LIBNAME= $T.so
 
 # Compilation directives
 WARN= /O2
-INCS= /I$(LUA_INC) -I$(LUAAPR_ROOT)/src $(APACHE2X_INC) /I$(APREQ_ROOT)/include 
-CFLAGS= /DWIN32 /DLUA_LIB /DAPREQ_DECLARE_STATIC /DWIN32_LEAN_AND_MEAN /MD $(WARN) $(INCS)
+INCS= /I$(LUA_INC) $(APACHE2X_INC)
+CFLAGS= /DWIN32 /DLUA_LIB /DWIN32_LEAN_AND_MEAN /MD $(WARN) $(INCS)
 CC= cl
-
-

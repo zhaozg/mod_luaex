@@ -1,91 +1,10 @@
 #include "mod_luaex.h"
 
-#include "mod_proxy.h"
 #include <mod_so.h>
-#include <lua_apr.h>
-
-#include "private.h"
 
 #if AP_SERVER_MAJORVERSION_NUMBER!=2
 #error Sorry, Only support Apache2
 #endif
-
-void pstack_dump(lua_State *L, const char *msg)
-{
-  int i;
-  int top = lua_gettop(L);
-
-  printf("Lua Stack Dump: [%s]\n", msg);
-
-  for (i = 1; i <= top; i++)
-  {
-    int t = lua_type(L, i);
-    switch (t)
-    {
-    case LUA_TSTRING:
-    {
-      printf("%d:  '%s'\n", i, lua_tostring(L, i));
-      break;
-    }
-    case LUA_TUSERDATA:
-    {
-      printf("%d:  userdata\n", i);
-      break;
-    }
-    case LUA_TLIGHTUSERDATA:
-    {
-      printf("%d:  lightuserdata\n",
-             i);
-      break;
-    }
-    case LUA_TNIL:
-    {
-      printf("%d:  NIL\n", i);
-      break;
-    }
-    case LUA_TNONE:
-    {
-      printf("%d:  None\n", i);
-      break;
-    }
-    case LUA_TBOOLEAN:
-    {
-      printf("%d:  %s\n", i, lua_toboolean(L,
-                                           i) ? "true" :
-             "false");
-      break;
-    }
-    case LUA_TNUMBER:
-    {
-      printf("%d:  %g\n", i, lua_tonumber(L, i));
-      break;
-    }
-    case LUA_TTABLE:
-    {
-      printf("%d:  <table>\n", i);
-      break;
-    }
-    case LUA_TTHREAD:
-    {
-      printf("%d:  <thread>\n", i);
-      break;
-    }
-    case LUA_TFUNCTION:
-    {
-      printf("%d:  <function>\n", i);
-      break;
-    }
-    default:
-    {
-      printf("%d:  unknown: [%s]\n", i, lua_typename(L, i));
-      break;
-    }
-    }
-  }
-}
-/************************************************************************/
-/*                                                                      */
-/************************************************************************/
 
 void *ml_check_object(lua_State *L, int index, const char*metaname)
 {
@@ -100,7 +19,6 @@ int  ml_push_object(lua_State*L, const void* data, const char*metaname)
   lua_setmetatable(L, -2);
   return 1;
 }
-
 
 int ml_push_status(lua_State*L, apr_status_t status)
 {
@@ -135,16 +53,6 @@ int ml_isudata (lua_State *L, int ud, const char *tname)
   return 0;  /* to avoid warnings */
 }
 
-/**************************************************/
-
-
-
-//call lua function
-/************************************************************************/
-/* 我们使用C的vararg来封装对Lua函数的调用。我们的封装后的函数（call_lua_va）*/
-/* 接受被调用的函数明作为第一个参数，第二参数是一个描述参数和结果类型的 */
-/* 字符串，最后是一个保存返回结果的变量指针的列表                       */
-/************************************************************************/
 /*
   sig define call lua function protocol
   lua function
@@ -283,10 +191,8 @@ int ml_call(lua_State *L, const char *func, const char *sig, ...)
   va_end(vl);
   return status;
 }
-/************************************************************************/
-/* ml_handler                                                          */
-/************************************************************************/
 
+/* ml_handler                                                          */
 static int ml_load_chunk(lua_State *L, const char* script, const char* title)
 {
   int status = 0;
@@ -334,26 +240,12 @@ int call_lua_output_handle(lua_State *L,
   return status;
 }
 
-
-// ======================================
-/*
-*  the table of configuration directives we provide
-*/
+/* the table of configuration directives we provide */
 typedef struct
 {
   apr_bucket_brigade *tmpBucket;
   lua_State *L;
 } lua_filter_ctx;
-
-AP_LUA_DECLARE(void) ap_lua_load_config_lmodule(lua_State *L);
-
-static void lua_open_callback(lua_State *L, apr_pool_t *p, void *ctx)
-{
-  ap_lua_init(L, p);
-  ap_lua_load_apache2_lmodule(L);
-  ap_lua_load_request_lmodule(L, p);
-  ap_lua_load_config_lmodule(L);
-}
 
 apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
 {
@@ -365,6 +257,7 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
   struct dir_config *d = ap_get_module_config(r->per_dir_config, &luaex_module);
   const char* script = apr_table_get(d->filter, f->frec->name);
   char *data;
+  const char* content_type = NULL;
   apr_size_t len;
 
   int i = 1;
@@ -383,25 +276,19 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
       return ap_pass_brigade(f->next, bb);
     }
 
+    content_type = apr_table_get(r->headers_out, "Content-Type");
+    if (content_type && strncasecmp(content_type, "text/", 5) != 0 && strcasecmp(content_type, "application/x-javascript") != 0)
+    {
+      ap_remove_output_filter(f);
+      return ap_pass_brigade(f->next, bb);
+    }
+
     f->ctx = apr_palloc(r->pool, sizeof(lua_filter_ctx));
     ctx = f->ctx;
     ctx->L = lua_newthread(L);
     ctx->tmpBucket = apr_brigade_create(r->pool, c->bucket_alloc);
     L = ctx->L;
     r->chunked = 1;
-    /*
-    if (apr_table_get(r->headers_out, "Content-Length"))
-    {
-      apr_table_unset(r->headers_out, "Content-Length");
-      if(!ap_find_last_token(r->pool,
-        apr_table_get(r->headers_out,
-        "Transfer-Encoding"),
-        "chunked"))
-        apr_table_mergen(r->headers_out, "Transfer-Encoding", "chunked");
-
-      r->proto_num = HTTP_VERSION(1,1);
-      r->chunked = 1;
-        }*/
 
     rv = ml_load_chunk(L, script, f->frec->name);
     lua_settop(L, 0);
@@ -484,7 +371,6 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
       return HTTP_INTERNAL_SERVER_ERROR;
     }
 
-
     /* If we've safely reached the end, do a final call to Lua to allow for any
     finishing moves by the script, such as appending a tail. */
     if (APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(bb)))
@@ -514,31 +400,19 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
     }
   }
 
-
-  /*
-  #if AP_SERVER_MAJORVERSION_NUMBER==2 && AP_SERVER_MINORVERSION_NUMBER==0
-      APR_BRIGADE_FOREACH(b, bb) {
-  #elif AP_SERVER_MAJORVERSION_NUMBER==2
-    for (b = APR_BRIGADE_FIRST(bb);
-      b != APR_BRIGADE_SENTINEL(bb);
-      b = APR_BUCKET_NEXT(b))
-    {
-  #else
-  #error "Only Support Apache 2.0x or 2.xx
-  #endif
-    }
-  */
-
   return APR_SUCCESS;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
-
+#ifdef HAVA_LUA_APR_BIND
 apr_pool_t *lua_apr_pool_register(lua_State *L, apr_pool_t *new_pool);
+int luaopen_apr_core(lua_State *L);
+#endif
 static apr_status_t ml_pool_register(lua_State *L, apr_pool_t*pool )
 {
+#ifdef HAVA_LUA_APR_BIND
   lua_apr_pool_register(L, pool);
+#endif
   return OK;
 }
 
@@ -546,10 +420,6 @@ static apr_status_t ml_lua_request(lua_State *L, request_rec *r)
 {
   return ml_pool_register(L, r->pool);
 };
-
-
-int luaopen_apr_core(lua_State *L);
-int luaopen_rex_pcre(lua_State *L);
 
 static apr_status_t ml_lua_open(lua_State *L, apr_pool_t *p)
 {
@@ -560,13 +430,12 @@ static apr_status_t ml_lua_open(lua_State *L, apr_pool_t *p)
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "preload");
   lua_remove(L, -2); // Remove package
+#ifdef HAVE_LUA_APR_BIND
   lua_pushcfunction(L, luaopen_apr_core);
   lua_setfield(L, -2, "apr.core");
-
-  lua_pushcfunction(L, luaopen_rex_pcre);
-  lua_setfield(L, -2, "rex_pcre");
-
+#endif
   lua_pop(L, 1);
+
   ml_luaopen_extends(L) ;
   ml_ext_request_lmodule(L, p);
   return OK;
@@ -575,9 +444,336 @@ static apr_status_t ml_lua_open(lua_State *L, apr_pool_t *p)
 apr_status_t ml_register_hooks (apr_pool_t *p)
 {
   ap_find_module = APR_RETRIEVE_OPTIONAL_FN(ap_find_loaded_module_symbol);
-  ml_retrieve_option_functions (p);
   APR_OPTIONAL_HOOK(ap_lua, lua_request,  ml_lua_request, NULL, NULL, APR_HOOK_MIDDLE);
   APR_OPTIONAL_HOOK(ap_lua, lua_open,     ml_lua_open,    NULL, NULL, APR_HOOK_MIDDLE);
+  ml_retrieve_option_functions(p);
 
   return 0;
 }
+
+/* apache modules */
+
+/* extend apache2 modules */
+static const ml_constants status_tabs[] =
+{
+  { "HTTP_BAD_REQUEST",           HTTP_BAD_REQUEST },
+  { "HTTP_UNAUTHORIZED",          HTTP_UNAUTHORIZED },
+  { "HTTP_FORBIDDEN",             HTTP_FORBIDDEN },
+  { "HTTP_NOT_FOUND",             HTTP_NOT_FOUND },
+  { "HTTP_METHOD_NOT_ALLOWED",    HTTP_METHOD_NOT_ALLOWED },
+  { "HTTP_INTERNAL_SERVER_ERROR", HTTP_INTERNAL_SERVER_ERROR },
+  { "AP_FILTER_ERROR",            AP_FILTER_ERROR },
+
+  { NULL, 0 }
+};
+
+void ml_define_constants(lua_State *L, const  ml_constants tab[])
+{
+  int i;
+  for (i = 0; tab[i].name != NULL; i++)
+  {
+    lua_pushstring(L, tab[i].name);
+    lua_pushnumber(L, tab[i].val);
+    lua_settable(L, -3);
+  }
+}
+
+/************************************************************************/
+/* lua extends api not need any apache2 objects parameter               */
+/************************************************************************/
+static int lua_ap_module_info(lua_State *L)
+{
+  const char* moduleName = luaL_checkstring(L, 1);
+  module* mod = ap_find_linked_module(moduleName);
+  if (mod)
+  {
+    const command_rec *cmd;
+    lua_newtable(L);
+    lua_pushstring(L, "commands");
+    lua_newtable(L);
+    for (cmd = mod->cmds; cmd->name; ++cmd)
+    {
+      lua_pushstring(L, cmd->name);
+      lua_pushstring(L, cmd->errmsg);
+      lua_settable(L, -3);
+    }
+    lua_settable(L, -3);
+    return 1;
+  }
+  return 0;
+}
+
+static int lua_ap_loaded_modules(lua_State *L)
+{
+  int i;
+  lua_newtable(L);
+  for (i = 0; ap_loaded_modules[i] && ap_loaded_modules[i]->name; i++)
+  {
+    lua_pushinteger(L, i + 1);
+    lua_pushstring(L, ap_loaded_modules[i]->name);
+    lua_settable(L, -3);
+  }
+  return 1;
+}
+
+static int lua_ap_server_info(lua_State *L)
+{
+  lua_newtable(L);
+
+  lua_pushstring(L, "server_executable");
+  lua_pushstring(L, ap_server_argv0);
+  lua_settable(L, -3);
+
+  lua_pushstring(L, "server_root");  /** ap_runtime_dir_relative() instead. */
+  lua_pushstring(L, ap_server_root);
+  lua_settable(L, -3);
+
+  lua_pushstring(L, "runtime_dir");
+  lua_pushstring(L, ap_runtime_dir);
+  lua_settable(L, -3);
+
+  lua_pushstring(L, "scoreboard_fname");
+  lua_pushstring(L, ap_scoreboard_fname);
+  lua_settable(L, -3);
+
+  lua_pushstring(L, "server_mpm");
+  lua_pushstring(L, ap_show_mpm());
+  lua_settable(L, -3);
+
+  lua_pushstring(L, "server_conf");
+  ap_lua_push_server(L, ap_server_conf);
+  lua_settable(L, -3);
+
+  return 1;
+}
+
+/**
+* ap_strcmp_match (const char *str, const char *expected)
+* Determine if a string matches a patterm containing the wildcards '?' or '*'
+* @param str The string to check
+* @param expected The pattern to match against
+* @return 1 if the two strings match, 0 otherwise
+*/
+static int lua_ap_strcmp_match(lua_State *L)
+{
+  int returnValue;
+  const char* str = luaL_checkstring(L, 1);
+  const char* expected = luaL_checkstring(L, 2);
+  int ignoreCase = 0;
+
+  if (lua_isboolean(L, 3))
+    ignoreCase = lua_toboolean(L, 3);
+
+  if (!ignoreCase)
+    returnValue = ap_strcmp_match(str, expected);
+  else
+    returnValue = ap_strcasecmp_match(str, expected);
+  lua_pushboolean(L, (!returnValue)); /* Somehow, this doesn't match the docs */
+  return 1;
+}
+
+/**
+* ap_exists_config_define (const char *name)
+* Check for a definition from the server command line
+* @param name The define to check for
+* @return 1 if defined, 0 otherwise
+*/
+static int lua_ap_exists_config_define(lua_State *L)
+{
+  const char* name = luaL_checkstring(L, 1);
+  lua_pushboolean(L, ap_exists_config_define(name));
+  return 1;
+}
+
+static int lua_ap_method_register(lua_State *L)
+{
+  server_rec *s = (server_rec *)CHECK_SERVER_OBJECT(1);
+  const char* method = luaL_checkstring(L, 2);
+  int m = ap_method_register(s->process->pool, method);
+  lua_pushinteger(L, m);
+  return 1;
+}
+
+req_table_t *ap_lua_check_apr_table(lua_State *L, int index)
+{
+  req_table_t* t;
+  luaL_checkudata(L, index, "Apr.Table");
+  t = lua_unboxpointer(L, index);
+  return t;
+}
+
+static int lua_ap_table_unset(lua_State *L)
+{
+  req_table_t* t = ap_lua_check_apr_table(L, 1);
+  const char* key = luaL_checkstring(L, 2);
+  apr_table_unset(t->t, key);
+  return 0;
+}
+
+static int table_getm_do(void *v, const char *key, const char *val)
+{
+  lua_State *L = (lua_State *)v;
+  lua_pushstring(L, val);
+  return 1;
+}
+
+static int lua_ap_table_getm(lua_State *L)
+{
+  req_table_t* t = ap_lua_check_apr_table(L, 1);
+  const char* key = luaL_checkstring(L, 2);
+  int n = lua_gettop(L);
+  apr_table_do(table_getm_do, L, t->t, key, NULL);
+  return lua_gettop(L) - n;
+}
+
+/*** register apache2 apis ***/
+int ml_apache2_extends(lua_State*L)
+{
+  int limit = 0;
+
+  lua_getglobal(L, "apache2");  /*get apache2 table*/
+
+  lua_pushnumber(L, (lua_Number)getpid());
+  lua_setfield(L, -2, "pid");
+
+  lua_pushcfunction(L, lua_ap_table_unset);
+  lua_setfield(L, -2, "table_unset");
+
+  lua_pushcfunction(L, lua_ap_table_getm);
+  lua_setfield(L, -2, "table_getm");
+
+  lua_pushcfunction(L, lua_ap_module_info);
+  lua_setfield(L, -2, "module_info");
+
+  lua_pushcfunction(L, lua_ap_loaded_modules);
+  lua_setfield(L, -2, "loaded_modules");
+
+  lua_pushcfunction(L, lua_ap_strcmp_match);
+  lua_setfield(L, -2, "strcmp_match");
+
+  lua_pushcfunction(L, lua_ap_exists_config_define);
+  lua_setfield(L, -2, "exists_config_define");
+
+  lua_pushcfunction(L, lua_ap_method_register);
+  lua_setfield(L, -2, "method_register");
+
+  ap_mpm_query(AP_MPMQ_HARD_LIMIT_THREADS, &limit);
+  lua_pushinteger(L, limit);
+  lua_setfield(L, -2, "scoreboard_thread_limit");
+
+  ap_mpm_query(AP_MPMQ_HARD_LIMIT_DAEMONS, &limit);
+  lua_pushinteger(L, limit);
+  lua_setfield(L, -2, "scoreboard_process_limit");
+
+  ml_define_constants(L, status_tabs);
+
+  lua_pop(L, 1); /*pop apache2 table */
+
+  return 0;
+}
+
+/* module config and command */
+static void *apreq_create_dir_config(apr_pool_t *p, char *d)
+{
+  /* d == OR_ALL */
+  struct dir_config *dc = apr_palloc(p, sizeof * dc);
+
+  dc->filter = NULL;
+  dc->resource = NULL;
+  dc->L = NULL;
+  return dc;
+}
+
+static const char *luaex_cmd_OuputFilter(cmd_parms *cmd,
+    void *dcfg,
+    const char *filter, const char *script)
+{
+  struct dir_config *conf = dcfg;
+  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+
+  if (err != NULL)
+    return err;
+
+  if (conf->filter == NULL)
+  {
+    conf->filter = apr_table_make(cmd->pool, 8);
+  }
+
+  if (conf->filter == NULL)
+    return "Out of memory";
+
+  apr_table_set(conf->filter, filter, script);
+  ap_register_output_filter(filter, lua_output_filter, NULL, AP_FTYPE_RESOURCE);
+  return NULL;
+}
+
+
+const char *luaex_cmd_Reslist(cmd_parms *cmd,
+                              void *dcfg,
+                              const char *resource, const char *script);
+
+typedef struct ml_monitor
+{
+  const char* script;
+  const char* handler;
+} ml_monitor;
+
+static const char *Luaex_Monitor(cmd_parms *cmd, void *dcfg,
+                                 const char *script, const char *handler)
+{
+  struct dir_config *conf = dcfg;
+  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
+  ml_monitor *monitor;
+
+  if (err != NULL)
+    return err;
+
+  if (conf->monitor == NULL)
+  {
+    conf->monitor = apr_array_make(cmd->pool, 16, sizeof(ml_monitor));
+  }
+
+  if (conf->monitor == NULL)
+    return "Out of memory";
+  if (conf->monitor->nelts == 16)
+    return "Only allow 16 crontab rules";
+  monitor = apr_array_push(conf->monitor);
+
+  monitor->script = script;
+  monitor->handler = handler ? handler : "handle";
+
+  return NULL;
+}
+
+static const command_rec apreq_cmds[] =
+{
+  AP_INIT_TAKE12("Luaex_Monitor", Luaex_Monitor, NULL, OR_ALL,
+  "Monitor hook"),
+  AP_INIT_TAKE2("Luaex_OutputFilter", luaex_cmd_OuputFilter, NULL, OR_ALL,
+  "Luaex VM Output Filter Script "
+  "Lua_Output_Filter FilterName LuaScript"
+  "(`@PATH --LuaScript handle Script FilePath', `lua handle script content')"),
+  AP_INIT_TAKE2("Luaex_Reslist", luaex_cmd_Reslist, NULL, OR_ALL,
+  "Luaex Resource List management"
+  "Luaex_Reslist ResourceName LuaScript"
+  "(`@PATH --LuaScript handle Script FilePath', `lua handle script content')"
+  "constructor and destructor function must be exist in LuaScript"
+  "min, smax, hmax are option value, default is 0, 16, 16"),
+  { NULL }
+};
+
+static void register_hooks(apr_pool_t *p)
+{
+  ml_register_hooks(p);
+}
+
+module AP_MODULE_DECLARE_DATA luaex_module =
+{
+  STANDARD20_MODULE_STUFF,
+  apreq_create_dir_config,
+  NULL,
+  NULL,
+  NULL,
+  apreq_cmds,
+  register_hooks,
+};
