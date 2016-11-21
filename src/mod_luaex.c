@@ -317,7 +317,7 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
       if (rv != LUA_YIELD)
       {
         if (rv == LUA_ERRRUN)
-          printf(lua_tostring(L, -1));
+          printf("%s\n", lua_tostring(L, -1));
         return HTTP_INTERNAL_SERVER_ERROR;
       }
     }
