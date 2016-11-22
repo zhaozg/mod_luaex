@@ -257,7 +257,6 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
   struct dir_config *d = ap_get_module_config(r->per_dir_config, &luaex_module);
   const char* script = apr_table_get(d->filter, f->frec->name);
   char *data;
-  const char* content_type = NULL;
   apr_size_t len;
 
   int i = 1;
@@ -271,13 +270,6 @@ apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
     }
 
     if (apr_table_get(d->filter, f->frec->name) == NULL || apr_pool_userdata_get((void**)&L, ML_OUTPUT_FILTER_KEY4LUA, r->pool) || L == NULL)
-    {
-      ap_remove_output_filter(f);
-      return ap_pass_brigade(f->next, bb);
-    }
-
-    content_type = apr_table_get(r->headers_out, "Content-Type");
-    if (content_type && strncasecmp(content_type, "text/", 5) != 0 && strcasecmp(content_type, "application/x-javascript") != 0)
     {
       ap_remove_output_filter(f);
       return ap_pass_brigade(f->next, bb);
@@ -712,43 +704,8 @@ const char *luaex_cmd_Reslist(cmd_parms *cmd,
                               void *dcfg,
                               const char *resource, const char *script);
 
-typedef struct ml_monitor
-{
-  const char* script;
-  const char* handler;
-} ml_monitor;
-
-static const char *Luaex_Monitor(cmd_parms *cmd, void *dcfg,
-                                 const char *script, const char *handler)
-{
-  struct dir_config *conf = dcfg;
-  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
-  ml_monitor *monitor;
-
-  if (err != NULL)
-    return err;
-
-  if (conf->monitor == NULL)
-  {
-    conf->monitor = apr_array_make(cmd->pool, 16, sizeof(ml_monitor));
-  }
-
-  if (conf->monitor == NULL)
-    return "Out of memory";
-  if (conf->monitor->nelts == 16)
-    return "Only allow 16 crontab rules";
-  monitor = apr_array_push(conf->monitor);
-
-  monitor->script = script;
-  monitor->handler = handler ? handler : "handle";
-
-  return NULL;
-}
-
 static const command_rec apreq_cmds[] =
 {
-  AP_INIT_TAKE12("Luaex_Monitor", Luaex_Monitor, NULL, OR_ALL,
-  "Monitor hook"),
   AP_INIT_TAKE2("Luaex_OutputFilter", luaex_cmd_OuputFilter, NULL, OR_ALL,
   "Luaex VM Output Filter Script "
   "Lua_Output_Filter FilterName LuaScript"
