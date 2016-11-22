@@ -618,6 +618,15 @@ static int lua_ap_table_getm(lua_State *L)
   return lua_gettop(L) - n;
 }
 
+static int lua_ap_table_add(lua_State *L) {
+  req_table_t* t = ap_lua_check_apr_table(L, 1);
+  const char* key = luaL_checkstring(L, 2);
+  const char* val = luaL_checkstring(L, 3);
+
+  apr_table_add(t->t, key, val);
+  return 0;
+}
+
 /*** register apache2 apis ***/
 int ml_apache2_extends(lua_State*L)
 {
@@ -633,6 +642,9 @@ int ml_apache2_extends(lua_State*L)
 
   lua_pushcfunction(L, lua_ap_table_getm);
   lua_setfield(L, -2, "table_getm");
+
+  lua_pushcfunction(L, lua_ap_table_add);
+  lua_setfield(L, -2, "table_add");
 
   lua_pushcfunction(L, lua_ap_module_info);
   lua_setfield(L, -2, "module_info");
