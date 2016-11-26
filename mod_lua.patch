@@ -1,8 +1,5 @@
- modules/lua/mod_lua.c | 7 +------
- 1 file changed, 1 insertion(+), 6 deletions(-)
-
 diff --git a/modules/lua/mod_lua.c b/modules/lua/mod_lua.c
-index 459e252..69f23d8 100644
+index 459e252..a9d59eb 100644
 --- a/modules/lua/mod_lua.c
 +++ b/modules/lua/mod_lua.c
 @@ -41,11 +41,6 @@
@@ -30,3 +27,14 @@ index 459e252..69f23d8 100644
      return OK;
  }
  
+@@ -357,7 +352,9 @@ static apr_status_t lua_setup_filter_ctx(ap_filter_t* f, request_rec* r, lua_fil
+         if (hook_spec == NULL) {
+             continue;
+         }
+-        if (!strcasecmp(hook_spec->filter_name, f->frec->name)) {
++        if (!strcasecmp(hook_spec->filter_name, f->frec->name) ||
++           (!strncmp(f->frec->name, "BYTYPE:", 7) &&
++            !strcasecmp(hook_spec->filter_name, f->frec->name + 7))) {
+             spec = create_vm_spec(&pool, r, cfg, server_cfg,
+                                     hook_spec->file_name,
+                                     NULL,
