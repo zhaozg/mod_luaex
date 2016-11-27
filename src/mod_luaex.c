@@ -208,193 +208,6 @@ static int ml_load_chunk(lua_State *L, const char* script, const char* title)
   return status;
 }
 
-int call_lua_output_handle(lua_State *L,
-                           const char* script,
-                           ap_filter_t *f,
-                           apr_bucket_brigade *bb,
-                           apr_bucket* eos)
-{
-  int status = 0;
-  request_rec *r = f->r;
-  const char* data = 0;
-  int len = 0;
-  apr_bucket *b;
-
-  if (eos)
-  {
-    if ((status = apr_brigade_pflatten(bb, (char **)&data, (apr_size_t*)&len, r->pool)) == APR_SUCCESS && len >= 0)
-    {
-      status = ml_load_chunk(L, script, f->frec->name);
-      if (status == 0)
-      {
-        apr_brigade_cleanup(bb);
-
-        status = ml_call(L, f->frec->name, "rS>S", r, data, len, (char **)&data, &len);
-        b = apr_bucket_transient_create(data, len, apr_bucket_alloc_create(f->c->pool));
-        APR_BRIGADE_INSERT_TAIL(bb, b);
-        APR_BRIGADE_INSERT_TAIL(bb, eos);
-      }
-    }
-  }
-  ap_remove_output_filter(f);
-  return status;
-}
-
-/* the table of configuration directives we provide */
-typedef struct
-{
-  apr_bucket_brigade *tmpBucket;
-  lua_State *L;
-} lua_filter_ctx;
-
-apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb)
-{
-  request_rec *r = f->r;
-  conn_rec *c = f->c;
-  lua_filter_ctx *ctx = NULL;
-  lua_State   *L = NULL;
-  apr_status_t rv;
-  struct dir_config *d = ap_get_module_config(r->per_dir_config, &luaex_module);
-  const char* script = apr_table_get(d->filter, f->frec->name);
-  char *data;
-  apr_size_t len;
-
-  int i = 1;
-
-  if (!f->ctx)
-  {
-    if (script == NULL)
-    {
-      ap_remove_output_filter(f);
-      return ap_pass_brigade(f->next, bb);
-    }
-
-    if (apr_table_get(d->filter, f->frec->name) == NULL || apr_pool_userdata_get((void**)&L, ML_OUTPUT_FILTER_KEY4LUA, r->pool) || L == NULL)
-    {
-      ap_remove_output_filter(f);
-      return ap_pass_brigade(f->next, bb);
-    }
-
-    f->ctx = apr_palloc(r->pool, sizeof(lua_filter_ctx));
-    ctx = f->ctx;
-    ctx->L = lua_newthread(L);
-    ctx->tmpBucket = apr_brigade_create(r->pool, c->bucket_alloc);
-    L = ctx->L;
-    r->chunked = 1;
-
-    rv = ml_load_chunk(L, script, f->frec->name);
-    lua_settop(L, 0);
-    if (rv == 0)
-    {
-      lua_getglobal(L, f->frec->name);
-      if (!lua_isfunction(L, -1))
-      {
-        ap_log_rerror(APLOG_MARK, APLOG_CRIT, 0, r, APLOGNO(02329)
-                      "lua: Unable to find function %s in %s",
-                      f->frec->name,
-                      script);
-        return APR_EGENERAL;
-      }
-
-      ap_lua_run_lua_request(L, r);
-      i++;
-
-      rv = lua_resume(L, 1);
-      if (rv == 0)
-      {
-        ap_remove_output_filter(f);
-        return ap_pass_brigade(f->next, bb);
-      }
-
-      if (rv != LUA_YIELD)
-      {
-        if (rv == LUA_ERRRUN)
-          printf("%s\n", lua_tostring(L, -1));
-        return HTTP_INTERNAL_SERVER_ERROR;
-      }
-    }
-    else
-    {
-      ap_log_rerror(APLOG_MARK, APLOG_CRIT, 0, r, APLOGNO(02329)
-                    "lua: Unable to load %s",
-                    script);
-      printf("%s\n", lua_tostring(L, -1));
-      return HTTP_INTERNAL_SERVER_ERROR;
-    }
-  }
-  ctx = f->ctx;
-  L = ctx->L;
-
-  rv = apr_brigade_pflatten(bb, &data, &len, r->pool);
-  if (rv == 0)
-  {
-    /* Push the bucket onto the Lua stack as a global var */
-    lua_getglobal(L, f->frec->name);
-    lua_pushlstring(L, data, len);
-    /* If Lua yielded, it means we have something to pass on */
-    i++;
-    rv = lua_resume(L, 1);
-
-    if (rv == LUA_YIELD)
-    {
-      size_t olen;
-      const char* output = lua_tolstring(L, 1, &olen);
-      lua_pop(L, 1);
-
-      if (olen > 0)
-      {
-        apr_bucket *pbktOut = apr_bucket_heap_create(output, olen, NULL, c->bucket_alloc);
-        APR_BRIGADE_INSERT_TAIL(ctx->tmpBucket, pbktOut);
-        rv = ap_pass_brigade(f->next, ctx->tmpBucket);
-        apr_brigade_cleanup(ctx->tmpBucket);
-        if (rv != APR_SUCCESS)
-        {
-          return rv;
-        }
-      }
-    }
-    else
-    {
-      ap_remove_output_filter(f);
-      apr_brigade_cleanup(bb);
-      apr_brigade_cleanup(ctx->tmpBucket);
-      if (rv == LUA_ERRRUN)
-        printf("%s\n%s", r->uri, lua_tostring(L, -1));
-      return HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    /* If we've safely reached the end, do a final call to Lua to allow for any
-    finishing moves by the script, such as appending a tail. */
-    if (APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(bb)))
-    {
-      lua_getglobal(L, f->frec->name);
-      lua_pushnil(L);
-
-      i++;
-      fflush(stdout);
-
-      if (lua_resume(L, 1) == LUA_YIELD)
-      {
-        apr_bucket *pbktOut;
-        size_t olen;
-        const char* output = lua_tolstring(L, 1, &olen);
-        if (olen > 0)
-        {
-          pbktOut = apr_bucket_heap_create(output, olen, NULL, c->bucket_alloc);
-          APR_BRIGADE_INSERT_TAIL(ctx->tmpBucket, pbktOut);
-        }
-      }
-      APR_BRIGADE_INSERT_TAIL(ctx->tmpBucket, apr_bucket_eos_create(c->bucket_alloc));
-      apr_brigade_cleanup(bb);
-      rv = ap_pass_brigade(f->next, ctx->tmpBucket);
-      apr_brigade_cleanup(ctx->tmpBucket);
-      return rv;
-    }
-  }
-
-  return APR_SUCCESS;
-}
-
 //////////////////////////////////////////////////////////////////////////
 #ifdef HAVA_LUA_APR_BIND
 apr_pool_t *lua_apr_pool_register(lua_State *L, apr_pool_t *new_pool);
@@ -682,35 +495,10 @@ static void *apreq_create_dir_config(apr_pool_t *p, char *d)
   /* d == OR_ALL */
   struct dir_config *dc = apr_palloc(p, sizeof * dc);
 
-  dc->filter = NULL;
   dc->resource = NULL;
   dc->L = NULL;
   return dc;
 }
-
-static const char *luaex_cmd_OuputFilter(cmd_parms *cmd,
-    void *dcfg,
-    const char *filter, const char *script)
-{
-  struct dir_config *conf = dcfg;
-  const char *err = ap_check_cmd_context(cmd, NOT_IN_LIMIT);
-
-  if (err != NULL)
-    return err;
-
-  if (conf->filter == NULL)
-  {
-    conf->filter = apr_table_make(cmd->pool, 8);
-  }
-
-  if (conf->filter == NULL)
-    return "Out of memory";
-
-  apr_table_set(conf->filter, filter, script);
-  ap_register_output_filter(filter, lua_output_filter, NULL, AP_FTYPE_RESOURCE);
-  return NULL;
-}
-
 
 const char *luaex_cmd_Reslist(cmd_parms *cmd,
                               void *dcfg,
@@ -718,10 +506,6 @@ const char *luaex_cmd_Reslist(cmd_parms *cmd,
 
 static const command_rec apreq_cmds[] =
 {
-  AP_INIT_TAKE2("Luaex_OutputFilter", luaex_cmd_OuputFilter, NULL, OR_ALL,
-  "Luaex VM Output Filter Script "
-  "Lua_Output_Filter FilterName LuaScript"
-  "(`@PATH --LuaScript handle Script FilePath', `lua handle script content')"),
   AP_INIT_TAKE2("Luaex_Reslist", luaex_cmd_Reslist, NULL, OR_ALL,
   "Luaex Resource List management"
   "Luaex_Reslist ResourceName LuaScript"

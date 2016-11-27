@@ -60,8 +60,6 @@ extern APR_OPTIONAL_FN_TYPE(ap_find_loaded_module_symbol) *ap_find_module;
 
 struct dir_config
 {
-  apr_table_t        *filter;
-  apr_array_header_t *monitor;
   apr_hash_t         *resource; /* hash table for usage->apr_reslist_t */
   lua_State          *L;
 };
@@ -71,7 +69,6 @@ module* ml_find_module(server_rec*s, const char*m);
 int ml_apache2_extends(lua_State*L);
 void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p);
 
-apr_status_t lua_output_filter(ap_filter_t *f, apr_bucket_brigade *bb);
 apr_status_t ml_register_hooks(apr_pool_t *p);
 apr_status_t ml_retrieve_option_functions(apr_pool_t *p);
 int ml_push_status(lua_State*L, apr_status_t status);
