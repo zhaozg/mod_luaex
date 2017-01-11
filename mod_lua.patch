@@ -1,5 +1,8 @@
+ modules/lua/mod_lua.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
 diff --git a/modules/lua/mod_lua.c b/modules/lua/mod_lua.c
-index 459e252..1fbc71e 100644
+index b73d9cbd03..e2effd9f80 100644
 --- a/modules/lua/mod_lua.c
 +++ b/modules/lua/mod_lua.c
 @@ -41,11 +41,6 @@
@@ -14,7 +17,7 @@ index 459e252..1fbc71e 100644
  APR_IMPLEMENT_OPTIONAL_HOOK_RUN_ALL(ap_lua, AP_LUA, int, lua_open,
                                      (lua_State *L, apr_pool_t *p),
                                      (L, p), OK, DECLINED)
-@@ -119,11 +114,11 @@ static void lua_open_callback(lua_State *L, apr_pool_t *p, void *ctx)
+@@ -120,11 +115,11 @@ static void lua_open_callback(lua_State *L, apr_pool_t *p, void *ctx)
      ap_lua_load_apache2_lmodule(L);
      ap_lua_load_request_lmodule(L, p);
      ap_lua_load_config_lmodule(L);
@@ -27,7 +30,7 @@ index 459e252..1fbc71e 100644
      return OK;
  }
  
-@@ -357,7 +352,9 @@ static apr_status_t lua_setup_filter_ctx(ap_filter_t* f, request_rec* r, lua_fil
+@@ -361,7 +356,9 @@ static apr_status_t lua_setup_filter_ctx(ap_filter_t* f, request_rec* r, lua_fil
          if (hook_spec == NULL) {
              continue;
          }
@@ -38,67 +41,31 @@ index 459e252..1fbc71e 100644
              spec = create_vm_spec(&pool, r, cfg, server_cfg,
                                      hook_spec->file_name,
                                      NULL,
-@@ -475,16 +472,17 @@ static apr_status_t lua_output_filter_handle(ap_filter_t *f, apr_bucket_brigade
-             const char *data;
-             apr_size_t len;
-             apr_bucket *pbktOut;
-+            int ret;
- 
-             /* read the bucket */
-             apr_bucket_read(pbktIn,&data,&len,APR_BLOCK_READ);
- 
--            /* Push the bucket onto the Lua stack as a global var */
-+            /* Push the bucket onto the Lua stack lua_resume arg */
-             lua_pushlstring(L, data, len);
--            lua_setglobal(L, "bucket");
+@@ -489,7 +486,8 @@ static apr_status_t lua_output_filter_handle(ap_filter_t *f, apr_bucket_brigade
+             lua_setglobal(L, "bucket");
              
-+            ret = lua_resume(L, 1);
              /* If Lua yielded, it means we have something to pass on */
 -            if (lua_resume(L, 0) == LUA_YIELD) {
-+            if (ret == LUA_YIELD || ret == 0) {
++            lua_pushlstring(L, data, len);
++            if (lua_resume(L, 1) == LUA_YIELD) {
                  size_t olen;
                  const char* output = lua_tolstring(L, 1, &olen);
                  if (olen > 0) { 
-@@ -497,7 +495,11 @@ static apr_status_t lua_output_filter_handle(ap_filter_t *f, apr_bucket_brigade
-                         return rv;
-                     }
-                 }
--            }
-+                if (ret == 0) {
-+                  ap_remove_output_filter(f);
-+                  return ap_pass_brigade(f->next, pbbIn);
-+                }
-+            } 
-             else {
-                 ctx->broken = 1;
-                 ap_lua_release_state(L, ctx->spec, r);
-@@ -514,8 +516,6 @@ static apr_status_t lua_output_filter_handle(ap_filter_t *f, apr_bucket_brigade
-         finishing moves by the script, such as appending a tail. */
-         if (APR_BUCKET_IS_EOS(APR_BRIGADE_LAST(pbbIn))) {
-             apr_bucket *pbktEOS;
--            lua_pushnil(L);
--            lua_setglobal(L, "bucket");
-             if (lua_resume(L, 0) == LUA_YIELD) {
-                 apr_bucket *pbktOut;
-                 size_t olen;
-@@ -610,10 +610,9 @@ static apr_status_t lua_input_filter_handle(ap_filter_t *f,
-             /* Push the bucket onto the Lua stack as a global var */
-             lastCall++;
-             lua_pushlstring(L, data, len);
--            lua_setglobal(L, "bucket");
+@@ -618,7 +616,8 @@ static apr_status_t lua_input_filter_handle(ap_filter_t *f,
+             lua_setglobal(L, "bucket");
              
              /* If Lua yielded, it means we have something to pass on */
 -            if (lua_resume(L, 0) == LUA_YIELD) {
++            lua_pushlstring(L, data, len);
 +            if (lua_resume(L, 1) == LUA_YIELD) {
                  size_t olen;
                  const char* output = lua_tolstring(L, 1, &olen);
                  pbktOut = apr_bucket_heap_create(output, olen, 0, c->bucket_alloc);
-@@ -633,8 +632,6 @@ static apr_status_t lua_input_filter_handle(ap_filter_t *f,
-         finishing moves by the script, such as appending a tail. */
-         if (lastCall == 0) {
-             apr_bucket *pbktEOS = apr_bucket_eos_create(c->bucket_alloc);
--            lua_pushnil(L);
--            lua_setglobal(L, "bucket");
-             if (lua_resume(L, 0) == LUA_YIELD) {
-                 apr_bucket *pbktOut;
-                 size_t olen;
+@@ -649,6 +648,7 @@ static apr_status_t lua_input_filter_handle(ap_filter_t *f,
+             }
+             APR_BRIGADE_INSERT_TAIL(pbbOut,pbktEOS);
+             ap_lua_release_state(L, ctx->spec, r);
++            ap_remove_input_filter(f);
+         }
+     }
+     return APR_SUCCESS;

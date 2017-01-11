@@ -209,13 +209,13 @@ static int ml_load_chunk(lua_State *L, const char* script, const char* title)
 }
 
 //////////////////////////////////////////////////////////////////////////
-#ifdef HAVA_LUA_APR_BIND
+#ifdef HAVE_LUA_APR_BIND
 apr_pool_t *lua_apr_pool_register(lua_State *L, apr_pool_t *new_pool);
 int luaopen_apr_core(lua_State *L);
 #endif
 static apr_status_t ml_pool_register(lua_State *L, apr_pool_t*pool )
 {
-#ifdef HAVA_LUA_APR_BIND
+#ifdef HAVE_LUA_APR_BIND
   lua_apr_pool_register(L, pool);
 #endif
   return OK;

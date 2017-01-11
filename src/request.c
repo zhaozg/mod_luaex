@@ -522,7 +522,6 @@ static int req_add_output_filter(lua_State *L)
   const char* filter = luaL_checkstring(L, 2);
 
   ap_filter_t * f = ap_add_output_filter(filter, NULL, r, r->connection);
-  apr_pool_userdata_set(L, ML_OUTPUT_FILTER_KEY4LUA, apr_pool_cleanup_null, r->pool);
   lua_pushboolean(L, f != NULL);
   return 1;
 }

@@ -52,7 +52,6 @@ req_fun_t *ml_makefun(const void *fun, int type, apr_pool_t *pool);
 #include <mpm_common.h>
 #include <mod_so.h>
 
-#define ML_OUTPUT_FILTER_KEY4LUA  "luavm4outputfilter"
 #define ML_POST_BUFFER_SIZE   (128 * 1024 * 1024)
 
 extern module AP_MODULE_DECLARE_DATA luaex_module;
