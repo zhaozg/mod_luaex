@@ -1,14 +1,16 @@
-HTTPSRC	?= ../httpd-2.4.23
-HTTPDST	?= /usr/local/httpd
-
-APXS=$(HTTPDST)/bin/apxs -i -a -c -n luaex -I$(HTTPSRC)/include -I$(HTTPSRC)/modules/lua
-SRC=src/mod_luaex.c src/extends.c  src/request.c
+HTTPSRC ?= ../httpd
+HTTPDST ?= /usr/local/apache2
+APXS    ?= $(HTTPDST)/bin/apxs
+LUAINCS ?= /usr/local/include/luajit-2.1
+CFLAGS  += -I$(LUAINCS) -I$(HTTPSRC)/include -I$(HTTPSRC)/modules/lua
+FLAGS    = -i -a -c -n luaex $(CFLAGS) $(INCS)
+SRC      = src/mod_luaex.c src/extends.c  src/request.c
 
 all:
-	$(APXS) -DWall $(SRC)
+	$(APXS) -DWall $(FLAGS) $(SRC)
 
 clean:
-	-rm -f mod_luaex.o mod_luaex.lo mod_luaex.slo mod_luaex.la 
+	-rm -f mod_luaex.o mod_luaex.lo mod_luaex.slo mod_luaex.la
 	-rm -f $(shared)
 	-rm -f $(patsubst %.c,%.lo, $(SRC))
 	-rm -f $(patsubst %.c,%.slo,$(SRC))
