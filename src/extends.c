@@ -149,7 +149,9 @@ int ml_slotmem_lookup(lua_State*L)
   const char* provider_name = luaL_checkstring(L, 1);
   const char* provider_group = luaL_optstring(L, 2, AP_SLOTMEM_PROVIDER_GROUP);
   const char* provider_version = luaL_optstring(L, 3, "0");
-  ap_slotmem_provider_t *provider = ap_lookup_provider(provider_group, provider_name, provider_version);
+  ap_slotmem_provider_t *provider = ap_lookup_provider(provider_group,
+                                    provider_name,
+                                    provider_version);
   ml_slotmem *mem = NULL;
 
   if (provider == NULL)
@@ -175,7 +177,12 @@ int ml_slotmem_create(lua_State*L)
   sm->_num  = luaL_optint(L, 5, sm->_num);
   sm->_type = luaL_optint(L, 6, sm->_type);
 
-  status = sm->_provider->create(&sm->_instance, name, sm->_size + sizeof(int), sm->_num, sm->_type, r->pool);
+  status = sm->_provider->create(&sm->_instance,
+                                 name,
+                                 sm->_size + sizeof(int),
+                                 sm->_num,
+                                 sm->_type,
+                                 r->pool);
   return ml_push_status(L, status);
 }
 
@@ -186,7 +193,11 @@ int ml_slotmem_attach(lua_State*L)
   const char* name = luaL_checkstring(L, 3);
   apr_status_t status;
 
-  status = sm->_provider->attach(&sm->_instance, name, &sm->_size, &sm->_num, r->pool);
+  status = sm->_provider->attach(&sm->_instance,
+                                 name,
+                                 &sm->_size,
+                                 &sm->_num,
+                                 r->pool);
   if (status == APR_SUCCESS) sm->_size -= sizeof(int);
   return ml_push_status(L, status);
 }
@@ -197,7 +208,10 @@ static int ml_smp_get(lua_State*L)
   ml_slotmem* sm = CHECK_SLOTMEM_OBJECT(1);
   int id = luaL_checkint(L, 2);
   char* buf = malloc(sm->_size);
-  apr_status_t status = sm->_provider->get(sm->_instance, id, (unsigned char*)buf, sm->_size);
+  apr_status_t status = sm->_provider->get(sm->_instance,
+                                           id,
+                                           (unsigned char*)buf,
+                                           sm->_size);
   if (status == APR_SUCCESS)
   {
     int size = *(int*)buf;
@@ -227,7 +241,10 @@ static int ml_smp_put(lua_State*L)
     char* dat = malloc(sm->_size + sizeof(int));
     *(int*)dat = len;
     strncpy(dat + sizeof(int), luaL_checkstring(L, 3), len);
-    status = sm->_provider->put(sm->_instance, id, (unsigned char*)dat, len + sizeof(int));
+    status = sm->_provider->put(sm->_instance,
+                                id,
+                                (unsigned char*)dat,
+                                len + sizeof(int));
   }
   return ml_push_status(L, status);
 }
@@ -297,7 +314,7 @@ static int ml_smp_call(lua_State*L)
   }
   else
   {
-    int id;
+    unsigned int id;
     apr_status_t status = sm->_provider->grab(sm->_instance, &id);
     if (status == APR_SUCCESS)
     {
@@ -326,18 +343,29 @@ static int ml_sop_store(lua_State*L)
 {
   ml_socache *c = CHECK_SOCACHE_OBJECT(1);
   size_t kl = 0, dl = 0;
-  char* key = (char*)luaL_checklstring(L, 2, &kl);
-  char* dat = NULL;
+  const char* key = luaL_checklstring(L, 2, &kl);
+  const char* dat = NULL;
   int n = lua_gettop(L);
   apr_status_t rv = 0;
   if (lua_isnil(L, 3))
   {
-    rv = c->_provider->remove(c->_instance, c->_server, key, kl, c->_pool);
+    rv = c->_provider->remove(c->_instance,
+                              c->_server,
+                              (const unsigned char*)key,
+                              kl,
+                              c->_pool);
   }
   else
   {
-    dat = (char* )luaL_checklstring(L, 3, &dl);
-    rv = c->_provider->store(c->_instance, c->_server, key, kl, c->_timeout + apr_time_now(), dat, dl, c->_pool);
+    dat = luaL_checklstring(L, 3, &dl);
+    rv = c->_provider->store(c->_instance,
+                             c->_server,
+                             (const unsigned char*)key,
+                             kl,
+                             c->_timeout + apr_time_now(),
+                             (unsigned char*)dat,
+                             dl,
+                             c->_pool);
   }
   return ml_push_status(L, rv);
 }
@@ -350,11 +378,16 @@ static int ml_sop_retrieve(lua_State*L)
   const char* key = luaL_checklstring(L, 2, &kl);
   apr_status_t rv;
   unsigned char* dat = malloc(dl);
-  rv = c->_provider->retrieve(c->_instance, c->_server, key, kl, dat, (unsigned int*)&dl, c->_pool);
+  rv = c->_provider->retrieve(c->_instance,
+                              c->_server,
+                              (const unsigned char*)key,
+                              kl,
+                              dat,
+                              (unsigned int*)&dl,
+                              c->_pool);
   if (rv == APR_SUCCESS)
   {
-    //c->_provider->store(c->_instance,c->_server,key,kl,c->_timeout+apr_time_now(),dat,dl,c->_pool);
-    lua_pushlstring(L, dat, dl);
+    lua_pushlstring(L, (const char*)dat, dl);
     free(dat);
   }
   else
@@ -365,7 +398,11 @@ static int ml_sop_retrieve(lua_State*L)
 static int ml_sop_tostring(lua_State*L)
 {
   ml_socache *c = CHECK_SOCACHE_OBJECT(1);
-  lua_pushfstring(L, "socache %s(%p):%p", c->_provider->name, c->_provider, c->_instance);
+  lua_pushfstring(L,
+                  "socache %s(%p):%p",
+                  c->_provider->name,
+                  c->_provider,
+                  c->_instance);
   return 1;
 }
 
@@ -379,8 +416,8 @@ static apr_status_t ml_provider_next(ap_socache_instance_t *instance,
                                      apr_pool_t *pool)
 {
   lua_State* L = (lua_State*)userctx;
-  lua_pushlstring(L, id, idlen);
-  lua_pushlstring(L, data, datalen);
+  lua_pushlstring(L, (const char*)id, idlen);
+  lua_pushlstring(L, (const char*)data, datalen);
   lua_settable(L, -2);
   return APR_SUCCESS;
 }
@@ -389,7 +426,11 @@ static int ml_so_provider_table(lua_State*L)
 {
   ml_socache *c = CHECK_SOCACHE_OBJECT(1);
   lua_newtable(L);
-  if (c->_provider->iterate(c->_instance, c->_server, L, ml_provider_next, c->_pool) == APR_SUCCESS)
+  if (c->_provider->iterate(c->_instance,
+                            c->_server,
+                            L,
+                            ml_provider_next,
+                            c->_pool) == APR_SUCCESS)
   {
     return 1;
   }
@@ -425,7 +466,12 @@ int ml_socache_lookup(lua_State*L)
   hints.avg_obj_size = 1024;
   hints.expiry_interval = timeout;
 
-  apr_snprintf(socache_key, 128, "%s_%s_%s", provider_id, provider_name, AP_SOCACHE_PROVIDER_GROUP);
+  apr_snprintf(socache_key,
+               128,
+               "%s_%s_%s",
+               provider_id,
+               provider_name,
+               AP_SOCACHE_PROVIDER_GROUP);
 
   status = apr_pool_userdata_get((void**)&c, socache_key, pool);
   if ( status == APR_SUCCESS )
@@ -434,7 +480,9 @@ int ml_socache_lookup(lua_State*L)
     {
       const char* err;
       c = lua_newuserdata(L, sizeof(ml_socache));
-      c->_provider = ap_lookup_provider(AP_SOCACHE_PROVIDER_GROUP, provider_name, AP_SOCACHE_PROVIDER_VERSION);
+      c->_provider = ap_lookup_provider(AP_SOCACHE_PROVIDER_GROUP,
+                                        provider_name,
+                                        AP_SOCACHE_PROVIDER_VERSION);
       err = c->_provider->create(&c->_instance, provider_arg, pool, pool);
       if (err)
       {
@@ -492,9 +540,15 @@ static apr_status_t ml_apr_reslist_constructor(void **resource, void *params,
   if (err == LUA_ERRMEM)
     luaL_error(L, "memory allocation error. %s", lua_tostring(L, -1));
   if (err == LUA_ERRERR)
-    luaL_error(L, "error while running the error handler function. %s", lua_tostring(L, -1));
+    luaL_error(L,
+               "error while running the error handler function. %s",
+               lua_tostring(L, -1));
   if (err)
-    luaL_error(L, "unknown error(%d:%s) for load: %s. ", err, lua_tostring(L, -1), cb->name);
+    luaL_error(L,
+               "unknown error(%d:%s) for load: %s. ",
+               err,
+               lua_tostring(L, -1),
+               cb->name);
 
   luaL_checkudata(L, -1, cb->name);
   *resource = *(void**)lua_touserdata(L, -1);
@@ -520,9 +574,15 @@ static apr_status_t ml_apr_reslist_destructor(void *resource, void *params,
   if (err == LUA_ERRMEM)
     luaL_error(L, "memory allocation error. %s", lua_tostring(L, -1));
   if (err == LUA_ERRERR)
-    luaL_error(L, "error while running the error handler function. %s", lua_tostring(L, -1));
+    luaL_error(L,
+               "error while running the error handler function. %s",
+               lua_tostring(L, -1));
   if (err)
-    luaL_error(L, "unknown error(%d:%s) for load: %s. ", err, lua_tostring(L, -1), cb->name);
+    luaL_error(L,
+               "unknown error(%d:%s) for load: %s. ",
+               err,
+               lua_tostring(L, -1),
+               cb->name);
 
   return APR_SUCCESS;
 }
@@ -620,21 +680,38 @@ const char *luaex_cmd_Reslist(cmd_parms *cmd,
     if (err == LUA_ERRFILE)
       return apr_psprintf(cmd->pool, "cannot open/read: %s. ", script);
     if (err == LUA_ERRSYNTAX)
-      return apr_psprintf(cmd->pool, "syntax error during pre-compilation for: %s. ", script);
+      return apr_psprintf(cmd->pool,
+                          "syntax error during pre-compilation for: %s. ",
+                          script);
     if (err == LUA_ERRMEM)
-      return apr_psprintf(cmd->pool, "memory allocation error for load: %s. ", script);
+      return apr_psprintf(cmd->pool,
+                          "memory allocation error for load: %s. ",
+                          script);
     if (err)
-      return apr_psprintf(cmd->pool, "unknown error)(%d) for load: %s. ", err, script);
+      return apr_psprintf(cmd->pool,
+                          "unknown error)(%d) for load: %s. ",
+                          err,
+                          script);
 
     err = lua_pcall(L, 0, LUA_MULTRET, 0);
     if (err == LUA_ERRRUN)
-      return apr_psprintf(cmd->pool, "a runtime error. %s", lua_tostring(L, -1));
+      return apr_psprintf(cmd->pool,
+                          "a runtime error. %s",
+                          lua_tostring(L, -1));
     if (err == LUA_ERRMEM)
-      return apr_psprintf(cmd->pool, "memory allocation error. %s", lua_tostring(L, -1));
+      return apr_psprintf(cmd->pool,
+                          "memory allocation error. %s",
+                          lua_tostring(L, -1));
     if (err == LUA_ERRERR)
-      return apr_psprintf(cmd->pool, "error while running the error handler function. %s", lua_tostring(L, -1));
+      return apr_psprintf(cmd->pool,
+                          "error while running the error handler function. %s",
+                          lua_tostring(L, -1));
     if (err)
-      return apr_psprintf(cmd->pool, "unknown error(%d:%s) for load: %s. ", err, lua_tostring(L, -1), script);
+      return apr_psprintf(cmd->pool,
+                          "unknown error(%d:%s) for load: %s. ",
+                          err,
+                          lua_tostring(L, -1),
+                          script);
 
     {
       int min, smax, hmax, ttl;
@@ -643,22 +720,32 @@ const char *luaex_cmd_Reslist(cmd_parms *cmd,
 
       luaL_getmetatable(L, resource);
       if (lua_isnil(L, -1))
-        return apr_psprintf(cmd->pool, "%s not support %s object(metatable)", script, resource);
+        return apr_psprintf(cmd->pool,
+                            "%s not support %s object(metatable)",
+                            script,
+                            resource);
       cb->name = resource;
       lua_pop(L, 1);
 
       if (!lua_istable(L, -1))
-        return apr_psprintf(cmd->pool, "%s not return a table which makes a reslist for %s", script, resource);
+        return apr_psprintf(cmd->pool,
+                            "%s not return a table which makes a reslist for %s",
+                            script,
+                            resource);
 
       cb->L = conf->L;
       lua_getfield(L, -1, "constructor");
       if (!lua_isfunction(L, -1))
-        return apr_psprintf(cmd->pool, "%s not have a table field(constructor) function", script);
+        return apr_psprintf(cmd->pool,
+                            "%s not have a table field(constructor) function",
+                            script);
       cb->constructor_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
       lua_getfield(L, -1, "destructor");
       if (!lua_isfunction(L, -1))
-        return apr_psprintf(cmd->pool, "%s not have a table field(destructor) function", script);
+        return apr_psprintf(cmd->pool,
+                            "%s not have a table field(destructor) function",
+                            script);
       cb->destructor_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
       lua_getfield(L, -1, "min");
@@ -677,7 +764,15 @@ const char *luaex_cmd_Reslist(cmd_parms *cmd,
       ttl = luaL_optint(L, -1, 0);
       lua_pop(L, 1);
 
-      if (apr_reslist_create(&reslist, min, smax, hmax, ttl, ml_apr_reslist_constructor, ml_apr_reslist_destructor, cb, cmd->pool)
+      if (apr_reslist_create(&reslist,
+                             min,
+                             smax,
+                             hmax,
+                             ttl,
+                             ml_apr_reslist_constructor,
+                             ml_apr_reslist_destructor,
+                             cb,
+                             cmd->pool)
           == APR_SUCCESS)
       {
         apr_hash_set(conf->resource, resource, strlen(resource), reslist);
