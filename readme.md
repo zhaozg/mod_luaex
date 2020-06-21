@@ -17,7 +17,7 @@ The target environment is Apache HTTPd 2.4
 Please see mod\_lua.patch to view what changed.
 
 >cd $HTTPSRC/modules/lua
->patch < path of mod_lua.path
+>patch < path of mod_lua.patch
 
 then recompile apache httpd and install it.
 
@@ -40,7 +40,8 @@ LUAINCS: path to luajit include dir
 [mod_lua](http://httpd.apache.org/docs/2.4/mod/mod_lua.html)
 
 ### mod_luaex
-need to add
+
+TODO
 
 ## Bug
 
