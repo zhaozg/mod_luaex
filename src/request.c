@@ -366,10 +366,17 @@ static int req_get_client_block (lua_State *L)
   int bytesleft = luaL_optint (L, 2, ML_POST_BUFFER_SIZE);
   int status, n;
   int count = 0;
+  if (ap_should_client_block(r)==0)
+  {
+    lua_pushnil(L);
+    lua_pushstring(L, "not need to get_client_block");
+    return 2;
+  }
   if (bytesleft < 0)
   {
-    luaL_error (L, "block size must be positive");
-    return 0;
+    lua_pushnil(L);
+    lua_pushstring(L, "block size must be positive");
+    return 2;
   }
   while (bytesleft)
   {
