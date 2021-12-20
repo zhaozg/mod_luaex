@@ -522,17 +522,6 @@ static int lua_ap_send(lua_State *L)
   return 2;
 }
 
-/* FIXME: zhaozg */
-static int req_add_output_filter(lua_State *L)
-{
-  request_rec *r = CHECK_REQUEST_OBJECT(1);
-  const char* filter = luaL_checkstring(L, 2);
-
-  ap_filter_t * f = ap_add_output_filter(filter, NULL, r, r->connection);
-  lua_pushboolean(L, f != NULL);
-  return 1;
-}
-
 /**
  * ap_add_version_component (apr_pool_t *pconf, const char *component)
  * Add a component to the server description and banner strings
@@ -566,13 +555,6 @@ static int lua_ap_satisfies (lua_State *L)
   if (returnValue == SATISFY_ANY) lua_pushstring(L, "SATISFY_ANY");
   if (returnValue == SATISFY_ALL) lua_pushstring(L, "SATISFY_ALL");
   if (returnValue == SATISFY_NOSPEC) lua_pushstring(L, "SATISFY_NOSPEC");
-  return 1;
-}
-
-static int lua_ap_get_limit_req_body(lua_State *L)
-{
-  request_rec *r = CHECK_REQUEST_OBJECT(1);
-  lua_pushinteger(L, (lua_Integer)ap_get_limit_req_body(r));
   return 1;
 }
 
@@ -712,7 +694,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "add_version_component", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_add_version_component, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "request_has_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_request_has_body, APL_REQ_FUNTYPE_LUACFUN, p));
-  apr_hash_set(dispatch, "get_limit_req_body", APR_HASH_KEY_STRING, ml_makefun(&lua_ap_get_limit_req_body, APL_REQ_FUNTYPE_LUACFUN, p));
 
   apr_hash_set(dispatch, "meets_conditions", APR_HASH_KEY_STRING, ml_makefun(&req_meets_conditions, APL_REQ_FUNTYPE_LUACFUN, p));
 
@@ -746,8 +727,6 @@ void ml_ext_request_lmodule(lua_State *L, apr_pool_t *p)
   apr_hash_set(dispatch, "setup_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_setup_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "should_client_block", APR_HASH_KEY_STRING, ml_makefun(&req_should_client_block, APL_REQ_FUNTYPE_LUACFUN, p));
   apr_hash_set(dispatch, "discard_request_body", APR_HASH_KEY_STRING, ml_makefun(&req_discard_request_body, APL_REQ_FUNTYPE_LUACFUN, p));
-
-  apr_hash_set(dispatch, "add_output_filter", APR_HASH_KEY_STRING, ml_makefun(&req_add_output_filter, APL_REQ_FUNTYPE_LUACFUN, p));
 
   /* extends apache modules API */
   apr_hash_set(dispatch, "list_provider", APR_HASH_KEY_STRING, ml_makefun(&ml_list_provider, APL_REQ_FUNTYPE_LUACFUN, p));
